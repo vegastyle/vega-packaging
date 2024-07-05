@@ -9,7 +9,7 @@ description = "Command Line tool for updating data on files that relate to packa
 url = "https://github.com/vegastyle/vega-packaging"
 authors = { name = "David Vega", email = "david@vega.style" }
 readme = { file = "README.md", content-type = "text/markdown" }
-license = "MIT"
+license = { file = "LICENSE"}
 zip_safe = false
 dependencies = ["toml"]
 
