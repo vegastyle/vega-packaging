@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vega-packaging"
+version = "0.1.0"
+description = "Command Line tool for updating data on files that relate to packaging"
+url = "https://github.com/vegastyle/vega-packaging"
+authors = { name = "David Vega", email = "david@vega.style" }
+readme = { file = "README.md", content-type = "text/markdown" }
+license = "MIT"
+zip_safe = false
+dependencies = ["toml"]
+
+[project.urls]
+Homepage = "https://github.com/vegastyle/vega-packaging"
+Repository = "https://github.com/vegastyle/vega-packaging.git"
+Changelog = "https://github.com/vegastyle/vega-packaging/blob/main/CHANGELOG.md"
+
+[project.scripts]
+update_semantic_version = "vega.packaging.bootstrappers.update_semantic_version:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["vega.*"]
+exclude = ["venv", "tests"]
