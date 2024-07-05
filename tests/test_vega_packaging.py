@@ -1,12 +1,33 @@
 """Tests for the update_semantic_version python file to confirm that the features of the workflow work as
 intended.
 
-These tests are intended to be ran using pytest.pyproject.toml
+These tests are intended to be ran using pytest
 """
+import os
+import tempfile
 import datetime
+
+import toml
+import pytest
 
 from vega.packaging import commits
 from vega.packaging import factory
+
+
+@pytest.fixture
+def changelog_path():
+    path = os.path.join(tempfile.tempdir, "changelog.md")
+    yield path
+    if os.path.exists(path):
+        os.remove(path)
+
+
+@pytest.fixture
+def pyproject_path():
+    path = os.path.join(tempfile.tempdir, "pyproject.toml")
+    yield path
+    if os.path.exists(path):
+        os.remove(path)
 
 
 def test_commit_message_breakdown():
@@ -57,3 +78,39 @@ def test_parser_factory():
 
     changelog_cls = factory.get_parser_by_filename("pyproject.toml")
     assert changelog_cls.FILENAME == "pyproject.toml"
+
+
+def test_changelog_parser(changelog_path):
+    """Tests that the changelog parser works as expected"""
+    _, filename = os.path.split(changelog_path)
+    changelog_cls = factory.get_parser_by_filename(filename)
+    assert changelog_cls.FILENAME == "CHANGELOG.md"
+    message = commits.CommitMessage("#major #added added hello_world.py"
+                                    "#removed removed bad vibes")
+    changelog_parser = changelog_cls(changelog_path)
+    assert not changelog_parser.exists
+    changelog_parser.update(message)
+    assert changelog_parser.exists
+
+    content = f"{changelog_cls.TEMPLATE}\n{message.markdown}"
+    with open(changelog_parser.path, "r") as handle:
+        assert handle.read() == content
+
+def test_pyproject_parser(pyproject_path):
+    """Tests that the pyproject parser works as expected"""
+    _, filename = os.path.split(pyproject_path)
+    pyproject_cls = factory.get_parser_by_filename(filename)
+    assert pyproject_cls.FILENAME == "pyproject.toml"
+    message = commits.CommitMessage("#major #added added hello_world.py"
+                                    "#removed removed bad vibes")
+    pyproject_parser = pyproject_cls(pyproject_path)
+    assert not pyproject_parser.exists
+    pyproject_parser.create()
+    assert pyproject_parser.exists
+    pyproject_parser.update(message)
+
+    with open(pyproject_parser.path, "r") as handle:
+        content = toml.load(handle)
+        assert content["project"]["version"] == message.semantic_version
+
+

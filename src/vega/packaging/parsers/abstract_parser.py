@@ -17,9 +17,14 @@ class AbstractFileParser:
         Args:
             path: path to the file being parsed
         """
-        self._path = path
+        self.__path = path
         self._content = None
         self._version = None
+
+    @property
+    def path(self) -> str:
+        """The path to the file that is being parsed"""
+        return self.__path
 
     @property
     def version(self) -> str:
@@ -29,7 +34,7 @@ class AbstractFileParser:
     @property
     def exists(self) -> bool:
         """ Does this file exist on disk"""
-        return os.path.exists(self._path)
+        return os.path.exists(self.__path)
 
     @property
     def content(self):
@@ -60,4 +65,4 @@ class AbstractFileParser:
         if commit_message.bump:
             commit_message.bump_semantic_version()
 
-        self.version = commit_message.semantic_version
+        self._version = commit_message.semantic_version

@@ -1,11 +1,13 @@
-#TODO: This file is a duplicate from vega.core; remove duplicate logic once vega.core is published publicly
+# TODO: This file is a duplicate from vega.core; remove duplicate logic once vega.core is published publicly
 """Module with logic to help implement factory pattern logic in a program"""
-import importlib
+# There was an issue using importlib.util but importing directly resolves the problem
+from importlib import util as importlib_util
 import os
 import sys
 import types
 import typing
 import functools
+
 
 # TODO: Add regex argument to help filter out additional modules for importing
 def resolve_import_name(path: str):
@@ -54,8 +56,8 @@ def import_module_from_path(path: str, name: str = None) -> types.ModuleType:
 
     # Resolve which base name for the module to use
     name = name or resolve_import_name(path)
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
+    spec = importlib_util.spec_from_file_location(name, path)
+    module = importlib_util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
@@ -92,11 +94,12 @@ def import_modules_from_directory(path: str, depth=0):
     return modules
 
 
-def get_subclasses(cls: object) ->typing.List[object]:
+def get_subclasses(cls: object) -> typing.List[object]:
     """Gets a list of subclasses that a class is being inherited in."""
     return [subclass for subclass in cls.__subclasses__()]
 
-# End of duplicate code
+
+# End of duplicate code from vega.core
 @functools.cache
 def import_parsers():
     """Imports the file parsers into memory to allow them to be dynamically discovered"""
@@ -104,7 +107,7 @@ def import_parsers():
 
 
 @functools.cache
-def get_parser_by_filename(filename):
+def get_parser_cls_by_filename(filename):
     """Gets the correct parser based on the filename given"""
     import_parsers()
     root_cls = sys.modules["vega.packaging.parsers.abstract_parser"].AbstractFileParser
@@ -112,3 +115,17 @@ def get_parser_by_filename(filename):
         if cls.FILENAME.lower() == filename.lower():
             return cls
 
+
+def get_parser(path: str):
+    """Gets the parser object for the given file name and builds it using the message.
+
+    Args:
+        path: path to the file to parse
+
+    Returns:
+        vega.packaging.parser.abstract_parser.AbstractParser
+    """
+    _, filename = os.path.split(path)
+    parser_cls = get_parser_cls_by_filename(filename)
+    if parser_cls:
+        return parser_cls(path)

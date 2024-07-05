@@ -45,13 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     def content(self) -> list:
         """The contents of the changelog.md file."""
         if not self._content and self.exists:
-            with open(self._path, "r+") as handle:
+            with open(self.path, "r+") as handle:
                 self._content = list(handle.readlines())
         return self._content
 
     def create(self):
         """Creates a changelog file if it doesn't exist with some default values."""
-        with open(self._path, "w+") as handle:
+        with open(self.path, "w+") as handle:
             handle.write(self.TEMPLATE)
 
     def update(self, commit_message: commits.CommitMessage):
@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         # TODO: Create a decorator for this autocreate logic
         if not self.exists and self.AUTOCREATE:
             self.create()
-        else:
+        elif not self.exists:
             raise FileNotFoundError(f"{self._path} does not exist")
 
         self.update_version(commit_message)
@@ -76,5 +76,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             self.content.extend(["\n", commit_message.markdown])
 
         # Update the file
-        with open(self._path, "w+") as handle:
+        with open(self.path, "w+") as handle:
             handle.writelines(self.content)

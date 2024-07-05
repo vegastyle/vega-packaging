@@ -28,17 +28,17 @@ class PyProject(abstract_parser.AbstractFileParser):
     def content(self) -> dict:
         """The contents of this pyproject.toml file"""
         if not self._content and self.exists:
-            self._content = toml.load(self._path)
+            self._content = toml.load(self.path)
         return self._content or {}
 
     def create(self):
         """Creates a pyproject.toml file with some default values."""
         content = dict(self.TEMPLATE)
-        content["project"]["name"] = os.path.split(os.path.dirname(self._path))[-1]
+        content["project"]["name"] = os.path.split(os.path.dirname(self.path))[-1]
         content["project"]["version"] = self.DEFAULT_VERSION
 
-        with open(self._path, "w+") as handle:
-            toml.dumps(content, handle)
+        with open(self.path, "w+") as handle:
+            toml.dump(content, handle)
 
     def update(self, commit_message: commits.CommitMessage):
         """Updates the contents of the pyproject.toml file with data from the commit message.
@@ -50,8 +50,8 @@ class PyProject(abstract_parser.AbstractFileParser):
         # TODO: Create a decorator for this autocreate logic
         if not self.exists and self.AUTOCREATE:
             self.create()
-        else:
-            raise FileNotFoundError(f"{self._path} does not exist")
+        elif not self.exists:
+            raise FileNotFoundError(f"{self.path} does not exist")
 
         self.update_version(commit_message)
 
@@ -59,5 +59,5 @@ class PyProject(abstract_parser.AbstractFileParser):
         self.content["project"]["version"] = self.version
 
         # Update the file
-        with open(self._path, "w+") as handle:
-            toml.dumps(self.content, handle)
+        with open(self.path, "w+") as handle:
+            toml.dump(self.content, handle)
