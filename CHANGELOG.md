@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2024/07/07 04:52:00
+
+### Added
+
+- Added support for the GitHub env file
+- Added support for setting priority to the file parsers plugin to dictate parsing order
+- Added more content to the READEME.md with instructions on how to install and use this package
+- Added additional unit and integration tests to confirm everything works
+- Added reset method to the parsers class to reset the internal values so the data can be parsed again internally. 
 
 ## [0.1.0] - 2024/07/05 11:02:39
 

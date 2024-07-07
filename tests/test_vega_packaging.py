@@ -4,18 +4,21 @@ intended.
 These tests are intended to be ran using pytest
 """
 import os
+import re
 import tempfile
 import datetime
+import shutil
 
 import toml
 import pytest
 
 from vega.packaging import commits
 from vega.packaging import factory
-
+from vega.packaging.bootstrappers import update_semantic_version
 
 @pytest.fixture
 def changelog_path():
+    """Temporary changelog.md file for testing"""
     path = os.path.join(tempfile.tempdir, "changelog.md")
     yield path
     if os.path.exists(path):
@@ -24,10 +27,42 @@ def changelog_path():
 
 @pytest.fixture
 def pyproject_path():
+    """Temporary pyproject.toml file for testing"""
     path = os.path.join(tempfile.tempdir, "pyproject.toml")
     yield path
     if os.path.exists(path):
         os.remove(path)
+
+
+@pytest.fixture
+def githubenv_path():
+    """Gets the location of the github env file and creates a temporary path if it doesn't"""
+    delete_file = "GITHUB_ENV" not in os.environ
+    path = os.environ.get("GITHUB_ENV", os.path.join(tempfile.tempdir, "set_env_86bd2d54-09b3-476f-8235-5936444c37fa"))
+    yield path
+    if delete_file and os.path.exists(path):
+        os.remove(path)
+
+@pytest.fixture
+def temp_python_project():
+    """Temporary package directory file for testing."""
+    path = os.path.join(tempfile.tempdir, "test_python_packaging")
+    pyproject_path = os.path.join(path, "pyproject.toml")
+    if not os.path.exists(path):
+        os.mkdir(path)
+        with open(pyproject_path, "w+") as handle:
+            handle.write("""[build-system]
+requires = [ "setuptools >= 61.0",]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vega-packaging"
+version = "0.0.0"
+""")
+
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
 
 
 def test_commit_message_breakdown():
@@ -73,37 +108,38 @@ def test_message_markdown():
 
 
 def test_parser_factory():
-    changelog_cls = factory.get_parser_by_filename("changelog.md")
-    assert changelog_cls.FILENAME == "CHANGELOG.md"
+    changelog_cls = factory.get_parser_from_path("changelog.md")
+    assert changelog_cls.FILENAME_REGEX.pattern == "CHANGELOG.md"
 
-    changelog_cls = factory.get_parser_by_filename("pyproject.toml")
-    assert changelog_cls.FILENAME == "pyproject.toml"
+    changelog_cls = factory.get_parser_from_path("pyproject.toml")
+    assert changelog_cls.FILENAME_REGEX.pattern == "pyproject.toml"
 
 
 def test_changelog_parser(changelog_path):
     """Tests that the changelog parser works as expected"""
-    _, filename = os.path.split(changelog_path)
-    changelog_cls = factory.get_parser_by_filename(filename)
-    assert changelog_cls.FILENAME == "CHANGELOG.md"
     message = commits.CommitMessage("#major #added added hello_world.py"
                                     "#removed removed bad vibes")
-    changelog_parser = changelog_cls(changelog_path)
+
+    changelog_parser = factory.get_parser_from_path(changelog_path)
+    assert changelog_parser.FILENAME_REGEX.match("CHANGELOG.md") is not None
+
     assert not changelog_parser.exists
     changelog_parser.update(message)
     assert changelog_parser.exists
 
-    content = f"{changelog_cls.TEMPLATE}\n{message.markdown}"
+    content = f"{changelog_parser.TEMPLATE}\n{message.markdown}"
     with open(changelog_parser.path, "r") as handle:
         assert handle.read() == content
 
+
 def test_pyproject_parser(pyproject_path):
     """Tests that the pyproject parser works as expected"""
-    _, filename = os.path.split(pyproject_path)
-    pyproject_cls = factory.get_parser_by_filename(filename)
-    assert pyproject_cls.FILENAME == "pyproject.toml"
     message = commits.CommitMessage("#major #added added hello_world.py"
                                     "#removed removed bad vibes")
-    pyproject_parser = pyproject_cls(pyproject_path)
+
+
+    pyproject_parser = factory.get_parser_from_path(pyproject_path)
+    assert pyproject_parser.FILENAME_REGEX.match("pyproject.toml") is not None
     assert not pyproject_parser.exists
     pyproject_parser.create()
     assert pyproject_parser.exists
@@ -114,3 +150,50 @@ def test_pyproject_parser(pyproject_path):
         assert content["project"]["version"] == message.semantic_version
 
 
+def test_github_env_parser(githubenv_path):
+    """Tests that the pyproject parser works as expected"""
+    message = commits.CommitMessage("#major #added added hello_world.py"
+                                    "#removed removed bad vibes")
+
+
+    githubenv_parser = factory.get_parser_from_path(githubenv_path)
+    assert githubenv_parser.FILENAME_REGEX.pattern == "set_env_[a-z0-9-]+"
+    # As these tests may be ran
+    if not githubenv_parser.exists:
+        githubenv_parser.create()
+    assert githubenv_parser.exists
+    githubenv_parser.update(message)
+
+    with open(githubenv_parser.path, "r") as handle:
+        content = handle.read()
+        assert re.search("SEMANTIC_VERSION=1.0.0", content) is not None
+
+def test_update_semantic_version_python(temp_python_project):
+    """ Integration test to confirm that the code that makes up the 'update_semantic_version' cli command works on
+    a deployable python package."""
+
+    message_str = "#minor #security passed test_update_semantic_version"
+    paths = [os.path.join(temp_python_project, filename) for filename in os.listdir(temp_python_project)]
+
+    # Adding changelog path to test the autocreation
+    paths.append(os.path.join(temp_python_project, "CHANGELOG.md"))
+
+    update_semantic_version.update_semantic_version(message_str, paths)
+
+    # Check generated files
+    message = commits.CommitMessage(message_str)
+    message.semantic_version = "0.1.0"
+    
+    # Check changelog.md
+    changelog_path = os.path.join(temp_python_project, "changelog.md")
+    changelog_cls = factory.get_parser_cls_by_filename("changelog.md")
+
+    content = f"{changelog_cls.TEMPLATE}\n{message.markdown}"
+    with open(changelog_path, "r") as handle:
+        assert handle.read() == content
+        
+    # Check pyproject.toml
+    pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
+
+    with open(pyproject_path, "r") as handle:
+        assert toml.load(handle)["project"]["version"] == message.semantic_version

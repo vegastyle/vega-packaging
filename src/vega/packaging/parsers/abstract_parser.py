@@ -6,10 +6,11 @@ from vega.packaging import commits
 
 class AbstractFileParser:
     """Abstract file parser class for creating new file parsers."""
-    FILENAME = None
+    FILENAME_REGEX = None
     TEMPLATE = None
     AUTOCREATE = True
     DEFAULT_VERSION = "0.0.0"
+    PRIORITY = 5
 
     def __init__(self, path: str):
         """Constructor
@@ -27,25 +28,39 @@ class AbstractFileParser:
         return self.__path
 
     @property
-    def version(self) -> str:
-        """The semantic version parsed from this file"""
-        raise NotImplementedError("This abstract method needs to be reimplemented")
-
-    @property
     def exists(self) -> bool:
         """ Does this file exist on disk"""
         return os.path.exists(self.__path)
 
     @property
     def content(self):
-        """The content of this file after it has been parsed. The type will vary based on the file being parsed."""
+        """The contents of this pyproject.toml file"""
+        if not self._content and self.exists:
+            self._content = self.read()
+        return self._content
+
+    @property
+    def version(self) -> str:
+        """The semantic version parsed from this file"""
         raise NotImplementedError("This abstract method needs to be reimplemented")
+
+    def reset(self):
+        """Resets the values of the object so they get parsed again.
+
+        This class uses simple implementation of lazy loading to avoid parsing files until the data is needed.
+        """
+        self._content = None
+        self._version = None
 
     def create(self):
         """Creates the file on disk with some default values."""
         raise NotImplementedError("This abstract method needs to be reimplemented")
 
-    def update(self):
+    def read(self):
+        """Reads the file on disk."""
+        raise NotImplementedError("This abstract method needs to be reimplemented")
+
+    def update(self, commit_message: commits.CommitMessage):
         """Updates the data of the file"""
         raise NotImplementedError("This abstract method needs to be reimplemented")
 

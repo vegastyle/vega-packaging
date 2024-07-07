@@ -3,6 +3,8 @@
 # There was an issue using importlib.util but importing directly resolves the problem
 from importlib import util as importlib_util
 import os
+import platform
+
 import sys
 import types
 import typing
@@ -101,9 +103,20 @@ def get_subclasses(cls: object) -> typing.List[object]:
 
 # End of duplicate code from vega.core
 @functools.cache
-def import_parsers():
+def import_parsers() -> list:
     """Imports the file parsers into memory to allow them to be dynamically discovered"""
-    return import_modules_from_directory(os.path.join(os.path.dirname(__file__), "parsers"))
+    modules = []
+    discoverable_paths = [os.path.join(os.path.dirname(__file__), "parsers")]
+    if "PACKAGING_FILE_PARSERS" in os.environ:
+        if platform.system() == "Windows":
+            # Widnows uses ; separators for paths in their environment variables
+            discoverable_paths.extend(os.environ["PACKAGING_FILE_PARSERS"].split(";"))
+        else:
+            # Unix based OS uses : separators for paths in their environment variables
+            discoverable_paths.extend(os.environ["PACKAGING_FILE_PARSERS"].split(":"))
+    for directory in discoverable_paths:
+        modules.extend(import_modules_from_directory(directory))
+    return modules
 
 
 @functools.cache
@@ -112,12 +125,12 @@ def get_parser_cls_by_filename(filename):
     import_parsers()
     root_cls = sys.modules["vega.packaging.parsers.abstract_parser"].AbstractFileParser
     for cls in get_subclasses(root_cls):
-        if cls.FILENAME.lower() == filename.lower():
+        if cls.FILENAME_REGEX.match(filename):
             return cls
 
 
-def get_parser(path: str):
-    """Gets the parser object for the given file name and builds it using the message.
+def get_parser_from_path(path: str):
+    """Gets the parser object for the given file path.
 
     Args:
         path: path to the file to parse

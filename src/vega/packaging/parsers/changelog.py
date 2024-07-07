@@ -1,16 +1,15 @@
 """Module for holding the parser for the changelog.md file"""
 import re
 
-from vega.packaging import commits
+from vega.packaging import commits, decorators
 from vega.packaging.parsers import abstract_parser
 
 
 class Changelog(abstract_parser.AbstractFileParser):
-    """Parser for the changelog.md file.
-    """
-    FILENAME = "CHANGELOG.md"
+    """Parser for the changelog.md file."""
+    FILENAME_REGEX = re.compile("CHANGELOG.md", re.I)
     TEMPLATE = """# Changelog
-
+    
 All notable changes to the project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -19,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 """
+    PRIORITY = 2
 
     def __init__(self, path: str):
         """Constructor
@@ -41,32 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
                     break
         return self._version
 
-    @property
-    def content(self) -> list:
-        """The contents of the changelog.md file."""
-        if not self._content and self.exists:
-            with open(self.path, "r+") as handle:
-                self._content = list(handle.readlines())
-        return self._content
-
     def create(self):
         """Creates a changelog file if it doesn't exist with some default values."""
         with open(self.path, "w+") as handle:
             handle.write(self.TEMPLATE)
 
+    def read(self) -> list:
+        """Reads the changelog.md file."""
+        with open(self.path, "r+") as handle:
+            return list(handle.readlines())
+
+    @decorators.autocreate
     def update(self, commit_message: commits.CommitMessage):
         """Updates the content of the changelog.md file with data from the commit message.
 
         Args:
             commit_message: The message to update the changelog with.
         """
-
-        # TODO: Create a decorator for this autocreate logic
-        if not self.exists and self.AUTOCREATE:
-            self.create()
-        elif not self.exists:
-            raise FileNotFoundError(f"{self._path} does not exist")
-
         self.update_version(commit_message)
 
         # Add new changelog
