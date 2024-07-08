@@ -170,7 +170,7 @@ def test_github_env_parser(githubenv_path):
 
     githubenv_parser = factory.get_parser_from_path(githubenv_path)
     assert githubenv_parser.FILENAME_REGEX.pattern == "set_env_[a-z0-9-]+"
-    # As these tests may be ran
+    # As these tests may be run outside a GitHub workflow environments, the files may not exist
     if not githubenv_parser.exists:
         githubenv_parser.create()
     assert githubenv_parser.exists
