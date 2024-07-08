@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 """
     PRIORITY = 2
+    VERSION_REGEX = re.compile("## \\[(?P<version>[0-9]+.[0-9]+.[0-9]+)\\]")
 
     def __init__(self, path: str):
         """Constructor
@@ -27,19 +28,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             path: path to the changelog.md file
         """
         super(Changelog, self).__init__(path)
-        self._new_content_index = None
+        self._insert_version_index = None
 
     @property
     def version(self) -> str:
         """The semantic version parsed from this changelog.md file."""
         if not self._version:
-            for index, line in enumerate(self.content):
-                # At the first match of a semantic version stop and store it for later
-                if re.match("## \[[0-9]", line):
-                    self._version = re.search("[0-9]+.[0-9]+.[0-9]+", line).group()
-                    self._new_content_index = index
-                    break
+            self.__get_insert_version_index()
         return self._version
+
+    @property
+    def insert_version_index(self) -> int:
+        """The index to insert the new version markdown info"""
+        if not self._insert_version_index:
+            self.__get_insert_version_index()
+        return self._insert_version_index
+
+    def __get_insert_version_index(self):
+        """Gets the version and index where to insert the new version markdown changelog."""
+        for index, line in enumerate(self.content):
+            regex = self.VERSION_REGEX.match(line)
+            # At the first match of a semantic version stop and store it for later
+            if regex:
+                # We do this to make sure we don't override the
+                self._version = self._version or regex.group("version")
+                self._insert_version_index = index
+                break
 
     def create(self):
         """Creates a changelog file if it doesn't exist with some default values."""
@@ -61,8 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         self.update_version(commit_message)
 
         # Add new changelog
-        if self._new_content_index is not None:
-            self.content.insert(self._new_content_index, commit_message.markdown)
+        if self.insert_version_index is not None:
+            self.content.insert(self.insert_version_index, commit_message.markdown)
         else:
             self.content.extend(["\n", commit_message.markdown])
 
