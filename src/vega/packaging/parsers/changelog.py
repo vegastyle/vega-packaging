@@ -43,12 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     def create(self):
         """Creates a changelog file if it doesn't exist with some default values."""
-        with open(self.path, "w+") as handle:
+        with open(self.path, "w") as handle:
             handle.write(self.TEMPLATE)
 
     def read(self) -> list:
         """Reads the changelog.md file."""
-        with open(self.path, "r+") as handle:
+        with open(self.path, "r") as handle:
             return list(handle.readlines())
 
     @decorators.autocreate
@@ -67,5 +67,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             self.content.extend(["\n", commit_message.markdown])
 
         # Update the file
-        with open(self.path, "w+") as handle:
+        with open(self.path, "w") as handle:
             handle.writelines(self.content)

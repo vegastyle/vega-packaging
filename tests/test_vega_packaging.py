@@ -127,9 +127,21 @@ def test_changelog_parser(changelog_path):
     changelog_parser.update(message)
     assert changelog_parser.exists
 
-    content = f"{changelog_parser.TEMPLATE}\n{message.markdown}"
+    content = [changelog_parser.TEMPLATE, message.markdown]
     with open(changelog_parser.path, "r") as handle:
-        assert handle.read() == content
+        assert handle.read() == "\n".join(content)
+
+    # Run a second check to confirm that the message is getting added properly
+    message = commits.CommitMessage("#security checking that we don't add the same line at the end. #minor")
+    # This will generate a new parser object as the object generation isn't cached
+    changelog_parser = factory.get_parser_from_path(changelog_path)
+
+    assert changelog_parser.exists
+    changelog_parser.update(message)
+
+    content.insert(1, f"\n{message.markdown}")
+    with open(changelog_parser.path, "r") as handle:
+        assert handle.read() == "".join(content)
 
 
 def test_pyproject_parser(pyproject_path):

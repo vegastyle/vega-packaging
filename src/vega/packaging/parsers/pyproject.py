@@ -37,7 +37,7 @@ class PyProject(abstract_parser.AbstractFileParser):
         content["project"]["name"] = os.path.split(os.path.dirname(self.path))[-1]
         content["project"]["version"] = self.DEFAULT_VERSION
 
-        with open(self.path, "w+") as handle:
+        with open(self.path, "w") as handle:
             toml.dump(content, handle)
 
     def read(self) -> dict:
@@ -57,5 +57,5 @@ class PyProject(abstract_parser.AbstractFileParser):
         self.content["project"]["version"] = self.version
 
         # Update the file
-        with open(self.path, "w+") as handle:
+        with open(self.path, "w") as handle:
             toml.dump(self.content, handle)
