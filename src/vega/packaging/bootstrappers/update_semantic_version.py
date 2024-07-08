@@ -5,6 +5,7 @@ This supports any file that has had a parser made for it.
 import os
 
 import argparse
+import platform
 
 from vega.packaging import commits
 from vega.packaging import factory
@@ -47,9 +48,16 @@ def yield_paths(args: argparse.ArgumentParser):
     explicit_paths = [args.pyproject_path, args.changelog_path]
     if args.github_env:
         explicit_paths.append(os.environ.get("GITHUB_ENV", None))
-
+    is_windows = platform.system() == "Windows"
     for path in explicit_paths:
-        if path and path not in paths:
+        if not path:
+            # Skip none values
+            continue
+        elif (is_windows and not os.path.splitdrive(path)[0]) or (not is_windows and not path.startswith("/")):
+            # If no root path is specified on the explicitly set files
+            # we assume that they are relative to the given directory
+            path = os.path.join(args.directory, path)
+        if path not in paths:
             yield path
 
 

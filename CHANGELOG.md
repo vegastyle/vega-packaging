@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.3.1] - 2024/07/08 03:32:22
+
+### Fixed
+
+- fixed bug where files where getting parsed twice if a relative path was used when explicitly setting which files to 
+parse via the --changelog_path and --pyproject_path flags. 
+
+
 ## [0.3.0] - 2024/07/08 02:54:41
 
 ### Added
