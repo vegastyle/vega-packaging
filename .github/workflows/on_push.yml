@@ -1,0 +1,7 @@
+name: Workflows to call when push command is detecte on the repo
+
+on: push
+
+jobs:
+  update-semantic_version:
+    uses: vegastyle/vega-versioning-workflow/.github/workflows/update_version_workflow.yml@v1.1.1
