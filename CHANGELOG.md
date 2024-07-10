@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.3.3] - 2024/07/10 22:37:47
+
+### Fixed
+
+- fixed typo in the name of the on_push.yml workflow
+
+
 ## [0.3.2] - 2024/07/08 07:51:00
 
 ### Added
