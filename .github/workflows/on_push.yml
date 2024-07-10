@@ -1,4 +1,4 @@
-name: Workflows to call when push command is detecte on the repo
+name: Workflows to call when push command is detected on the repo
 
 on: push
 
