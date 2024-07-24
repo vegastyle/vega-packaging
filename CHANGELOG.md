@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.4.0] - 2024/07/24 01:15:12
+
+### Added
+
+- added verbose flag to make the command more verbose
+
+### Changed
+
+- added logging support
+
+
 ## [0.3.3] - 2024/07/10 22:37:47
 
 ### Fixed
