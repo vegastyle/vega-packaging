@@ -2,18 +2,23 @@
 
 This module uses features of the enum module only available in python 3.12 and higher
 """
+import logging
 import datetime
 import enum
 import re
 
+logger = logging.getLogger(__name__)
+
 
 class Versions(enum.Enum):
+    """ Enums for the different semantic verions"""
     MAJOR = 0
     MINOR = 1
     PATCH = 2
 
 
 class Changes(enum.Enum):
+    """Enum for the different possible changelog categories as determined by Keepchangelog.com"""
     # Keepchangelog.com standard changes
     ADDED = "added"
     CHANGED = "changed"
@@ -122,6 +127,7 @@ def bump_semantic_version(current_version: str, version_bump: enum.Enum) -> str:
     Return:
         str
     """
+    logger.debug(f"Performing {version_bump.name.lower()} bump")
     version_numbers = current_version.split(".")
 
     for index, value in enumerate(version_numbers[version_bump.value:]):
@@ -132,4 +138,7 @@ def bump_semantic_version(current_version: str, version_bump: enum.Enum) -> str:
             continue
         # Reset any version categories that follow to zero
         version_numbers[version_index] = "0"
-    return ".".join(version_numbers)
+
+    resolved_version = ".".join(version_numbers)
+    logger.debug(f"Bumped semantic version to {resolved_version}")
+    return resolved_version

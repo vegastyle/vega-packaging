@@ -3,12 +3,16 @@
 This supports any file that has had a parser made for it.
 """
 import os
-
+import datetime
 import argparse
 import platform
+import logging
 
 from vega.packaging import commits
 from vega.packaging import factory
+
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args():
@@ -23,9 +27,27 @@ def parse_args():
     parser.add_argument("-p", "--pyproject_path", help="path to the pyproject to update")
     parser.add_argument("-g", "--github_env", help="set the semantic revision env variable on git",
                         action=argparse.BooleanOptionalAction)
-
+    parser.add_argument("-v", "--verbose", help="print out debug statements",
+                        action=argparse.BooleanOptionalAction)
     return parser.parse_args()
 
+
+def setup_logging(verbose=False):
+    """Sets up logging for this application."""
+    default_log_directory = os.path.join(os.getcwd(), "logs")
+    current_time = datetime.datetime.now(datetime.UTC).strftime("%Y_%m_%dT%H_%M_%SZ")
+    log_path = os.path.join(default_log_directory, f"update_semantic_version_{current_time}.log")
+    if not os.path.exists(default_log_directory):
+        os.makedirs(default_log_directory)
+
+    log_format = "%(asctime)s %(message)s"
+    log_date_format = "%m/%d/%Y %I:%M:%S %p"
+    logging_level = logging.DEBUG if verbose else logging.WARNING
+    handlers = [logging.StreamHandler(), logging.FileHandler(log_path, encoding="utf-8")]
+    logging.basicConfig(format=log_format,
+                        datefmt=log_date_format,
+                        handlers=handlers,
+                        level=logging_level)
 
 def yield_paths(args: argparse.ArgumentParser):
     """Yields the paths should be parsed by this cli command based on the contents of the args parser.
@@ -38,6 +60,7 @@ def yield_paths(args: argparse.ArgumentParser):
     """
     # yield of files that are direct children of the given directory
     paths = []
+    logger.debug(f"Scanning {args.directory} for files to update.")
     for filename in os.listdir(args.directory):
         if os.path.isfile(filename):
             path = os.path.join(args.directory, filename)
@@ -48,6 +71,7 @@ def yield_paths(args: argparse.ArgumentParser):
     explicit_paths = [args.pyproject_path, args.changelog_path]
     if args.github_env:
         explicit_paths.append(os.environ.get("GITHUB_ENV", None))
+
     is_windows = platform.system() == "Windows"
     for path in explicit_paths:
         if not path:
@@ -85,15 +109,20 @@ def update_semantic_version(message_str: str, paths: list[str]):
         packaging_files.sort(key=lambda value: value.PRIORITY)
         for packaging_file in packaging_files:
             packaging_file.update(message)
-
-        print(f"Updated package with revision number {message.semantic_version}")
+            logger.info(f"Updated {packaging_file.path} with revision number {message.semantic_version}")
     else:
-        print(f"Ignoring Commit:\n\t{message_str}")
+        logger.warning(f"Ignoring Commit:\n\t{message_str}")
 
 
 def main():
     """Main function to call in this bootstrapper"""
+    # Parse args
     args = parse_args()
+
+    # Setup logging
+    setup_logging(args.verbose)
+
+    # Update semantic version
     update_semantic_version(args.message, yield_paths(args))
 
 

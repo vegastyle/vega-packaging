@@ -1,7 +1,11 @@
 """Module for holding the abstract file parser class"""
 import os
+import logging
 
 from vega.packaging import commits
+
+
+logger = logging.getLogger(__name__)
 
 
 class AbstractFileParser:
@@ -26,6 +30,12 @@ class AbstractFileParser:
     def path(self) -> str:
         """The path to the file that is being parsed"""
         return self.__path
+
+    @property
+    def filename(self) -> str:
+        """Name of the file being parsed."""
+        return os.path.basename(self.__path)
+
 
     @property
     def exists(self) -> bool:
@@ -71,9 +81,11 @@ class AbstractFileParser:
         If the commit message has a pending version bump, that version bump is applied.
         """
         if not commit_message.semantic_version and self.version:
+            logger.debug(f"Setting current semantic version to {self.version} from {self.filename}")
             commit_message.semantic_version = self.version
 
         elif not commit_message.semantic_version:
+            logger.debug(f"Setting current semantic version to the default {self.DEFAULT_VERSION} from {self.filename}")
             commit_message.semantic_version = self.DEFAULT_VERSION
             commit_message.bump = commit_message.bump or commits.Versions.MINOR
 
