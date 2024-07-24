@@ -11,7 +11,6 @@ import logging
 from vega.packaging import commits
 from vega.packaging import factory
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,11 +28,18 @@ def parse_args():
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-v", "--verbose", help="print out debug statements",
                         action=argparse.BooleanOptionalAction)
+    parser.add_argument("-l", "--log_to_disk", help="saves out logs to disk",
+                        action=argparse.BooleanOptionalAction)
     return parser.parse_args()
 
 
-def setup_logging(verbose=False):
-    """Sets up logging for this application."""
+def setup_logging(verbose: bool = False, write_to_disk: bool = True):
+    """Sets up logging for this application.
+
+    Args:
+        verbose: write debug and info statements to stdout. Defaults to False.
+        write_to_disk: write logs to disk. Defaults to True.
+    """
     default_log_directory = os.path.join(os.getcwd(), "logs")
     current_time = datetime.datetime.now(datetime.UTC).strftime("%Y_%m_%dT%H_%M_%SZ")
     log_path = os.path.join(default_log_directory, f"update_semantic_version_{current_time}.log")
@@ -43,11 +49,14 @@ def setup_logging(verbose=False):
     log_format = "%(asctime)s %(message)s"
     log_date_format = "%m/%d/%Y %I:%M:%S %p"
     logging_level = logging.DEBUG if verbose else logging.WARNING
-    handlers = [logging.StreamHandler(), logging.FileHandler(log_path, encoding="utf-8")]
+    handlers = [logging.StreamHandler()]
+    if write_to_disk:
+        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
     logging.basicConfig(format=log_format,
                         datefmt=log_date_format,
                         handlers=handlers,
                         level=logging_level)
+
 
 def yield_paths(args: argparse.ArgumentParser):
     """Yields the paths should be parsed by this cli command based on the contents of the args parser.
@@ -120,7 +129,7 @@ def main():
     args = parse_args()
 
     # Setup logging
-    setup_logging(args.verbose)
+    setup_logging(verbose=args.verbose, write_to_disk=args.log_to_disk)
 
     # Update semantic version
     update_semantic_version(args.message, yield_paths(args))
