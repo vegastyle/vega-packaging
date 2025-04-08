@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.5.0] - 2025/04/08 17:17:08
+
+### Added
+
+- support for bumping up the semantic version of package.json files from React projects.
+
+### Changed
+
+- added unit test for confirming that the semantic version for react packages updates properly.
+- update_semantic_version.py now supports a react_package_path flag for specifying the react package file to update.
+
+
 ## [0.4.1] - 2024/07/24 01:43:01
 
 ### Added
