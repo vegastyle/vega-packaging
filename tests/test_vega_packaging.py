@@ -8,6 +8,7 @@ import re
 import tempfile
 import datetime
 import shutil
+import json
 
 import toml
 import pytest
@@ -42,6 +43,16 @@ def githubenv_path():
     yield path
     if delete_file and os.path.exists(path):
         os.remove(path)
+
+
+@pytest.fixture
+def react_package_path():
+    """Temporary react package.json file for testing"""
+    path = os.path.join(tempfile.tempdir, "package.json")
+    yield path
+    if os.path.exists(path):
+        os.remove(path)
+
 
 @pytest.fixture
 def temp_python_project():
@@ -180,6 +191,25 @@ def test_github_env_parser(githubenv_path):
         content = handle.read()
         assert re.search("SEMANTIC_VERSION=1.0.0", content) is not None
 
+
+def test_react_package_parser(react_package_path):
+    """Tests that the pyproject parser works as expected"""
+    message = commits.CommitMessage("#major #added added hello_world.py"
+                                    "#removed removed bad vibes")
+
+    react_package_parser = factory.get_parser_from_path(react_package_path)
+    assert react_package_parser.FILENAME_REGEX.match("package.json") is not None
+    assert not react_package_parser.exists
+    react_package_parser.create()
+    assert react_package_parser.exists
+    react_package_parser.update(message)
+
+
+    with open(react_package_parser.path, "r+", encoding="utf-8") as handle:
+        content = json.load(handle)
+        assert content["version"] == message.semantic_version
+
+
 def test_update_semantic_version_python(temp_python_project):
     """ Integration test to confirm that the code that makes up the 'update_semantic_version' cli command works on
     a deployable python package."""
@@ -209,3 +239,6 @@ def test_update_semantic_version_python(temp_python_project):
 
     with open(pyproject_path, "r") as handle:
         assert toml.load(handle)["project"]["version"] == message.semantic_version
+
+
+

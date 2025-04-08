@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("-d", "--directory", help="directory to look for files to update", default=os.getcwd())
     parser.add_argument("-c", "--changelog_path", help="path to the changelog markdown file to update")
     parser.add_argument("-p", "--pyproject_path", help="path to the pyproject to update")
+    parser.add_argument("-r", "--react_package_path", help="path to the react package.json file to update")
     parser.add_argument("-g", "--github_env", help="set the semantic revision env variable on git",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-v", "--verbose", help="print out debug statements",
@@ -77,7 +78,7 @@ def yield_paths(args: argparse.ArgumentParser):
             paths.append(path)
 
     # Add explicitly set paths in args
-    explicit_paths = [args.pyproject_path, args.changelog_path]
+    explicit_paths = [args.pyproject_path, args.changelog_path, args.react_package_path]
     if args.github_env:
         explicit_paths.append(os.environ.get("GITHUB_ENV", None))
 
