@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.5.1] - 2025/04/15 16:33:06
+
+### Added
+
+- test to check that a react project version is updated properly.
+
+
 ## [0.5.0] - 2025/04/08 17:17:08
 
 ### Added
