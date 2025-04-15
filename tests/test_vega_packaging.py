@@ -17,6 +17,7 @@ from vega.packaging import commits
 from vega.packaging import factory
 from vega.packaging.bootstrappers import update_semantic_version
 
+
 @pytest.fixture
 def changelog_path():
     """Temporary changelog.md file for testing"""
@@ -69,6 +70,27 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vega-packaging"
 version = "0.0.0"
+""")
+
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
+
+
+@pytest.fixture
+def temp_react_project():
+    """Temporary package directory file for testing."""
+    path = os.path.join(tempfile.tempdir, "test_react_packaging")
+    pyproject_path = os.path.join(path, "package.json")
+    if not os.path.exists(path):
+        os.mkdir(path)
+        with open(pyproject_path, "w+") as handle:
+            handle.write("""{
+  "name": "test_project",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module"
+  }
 """)
 
     yield path
@@ -241,4 +263,33 @@ def test_update_semantic_version_python(temp_python_project):
         assert toml.load(handle)["project"]["version"] == message.semantic_version
 
 
+def test_update_semantic_version_react(temp_react_project):
+    """ Integration test to confirm that the code that makes up the 'update_semantic_version' cli command works on
+    a deployable react package."""
+
+    message_str = "#minor #security passed test_update_semantic_version"
+    paths = [os.path.join(temp_react_project, filename) for filename in os.listdir(temp_react_project)]
+
+    # Adding changelog path to test the autocreation
+    paths.append(os.path.join(temp_react_project, "CHANGELOG.md"))
+
+    update_semantic_version.update_semantic_version(message_str, paths)
+
+    # Check generated files
+    message = commits.CommitMessage(message_str)
+    message.semantic_version = "0.1.0"
+
+    # Check changelog.md
+    changelog_path = os.path.join(temp_react_project, "changelog.md")
+    changelog_cls = factory.get_parser_cls_by_filename("changelog.md")
+
+    content = f"{changelog_cls.TEMPLATE}\n{message.markdown}"
+    with open(changelog_path, "r") as handle:
+        assert handle.read() == content
+
+    # Check pyproject.toml
+    pyproject_path = os.path.join(temp_react_project, "package.json")
+
+    with open(pyproject_path, "r") as handle:
+        assert json.load(handle)["version"] == message.semantic_version
 
