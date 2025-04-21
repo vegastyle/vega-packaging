@@ -20,7 +20,8 @@ def parse_args():
         prog='Update Semantic Version',
         description='Updates the semantic version of the given files based on a commit message',
     )
-    parser.add_argument("-m", "--message", help="message to parse for the changelog", required=True)
+    parser.add_argument("-s", "--subject", help="subject of the message to parse for the changelog", required=True)
+    parser.add_argument("-m", "--description", help="description of the message to parse for the changelog")
     parser.add_argument("-d", "--directory", help="directory to look for files to update", default=os.getcwd())
     parser.add_argument("-c", "--changelog_path", help="path to the changelog markdown file to update")
     parser.add_argument("-p", "--pyproject_path", help="path to the pyproject to update")
@@ -94,6 +95,17 @@ def yield_paths(args: argparse.ArgumentParser):
         if path not in paths:
             yield path
 
+def is_valid_message(message_str: str) -> bool:
+    """Checks if the message string is valid for updating the semantic version.
+
+    Args:
+        message_str: string to be parsed to determine how to update the semantic version
+
+    Returns:
+        bool: True if the message is valid, False otherwise.
+    """
+    return "#" in message_str and "#ignore" not in message_str.lower()
+
 
 def update_semantic_version(message_str: str, paths: list[str]):
     """Updates the semantic version of the provided file paths ,if they are supported, based on the contents of the message string.
@@ -102,26 +114,25 @@ def update_semantic_version(message_str: str, paths: list[str]):
         message_str: string to be parsed to determine how to update the semantic version
         paths: list of files whose files should be updated.
     """
-    if "#" in message_str and "#ignore" not in message_str.lower():
-        # Parse commit message
-        message = commits.CommitMessage(message_str)
+ 
+    # Parse commit message
+    message = commits.CommitMessage(message_str)
 
-        # Get file parsers
-        packaging_files = []
+    # Get file parsers
+    packaging_files = []
 
-        for path in paths:
-            packaging_file = factory.get_parser_from_path(path)
-            if not packaging_file or (not packaging_file.exists and not packaging_file.AUTOCREATE):
-                continue
-            packaging_files.append(packaging_file)
+    for path in paths:
+        packaging_file = factory.get_parser_from_path(path)
+        if not packaging_file or (not packaging_file.exists and not packaging_file.AUTOCREATE):
+            continue
+        packaging_files.append(packaging_file)
 
-        # Update files based on parsing priority
-        packaging_files.sort(key=lambda value: value.PRIORITY)
-        for packaging_file in packaging_files:
-            packaging_file.update(message)
-            logger.info(f"Updated {packaging_file.path} with revision number {message.semantic_version}")
-    else:
-        logger.warning(f"Ignoring Commit:\n\t{message_str}")
+    # Update files based on parsing priority
+    packaging_files.sort(key=lambda value: value.PRIORITY)
+    for packaging_file in packaging_files:
+        packaging_file.update(message)
+        logger.info(f"Updated {packaging_file.path} with revision number {message.semantic_version}")
+    return True
 
 
 def main():
@@ -132,8 +143,19 @@ def main():
     # Setup logging
     setup_logging(verbose=args.verbose, write_to_disk=args.log_to_disk)
 
-    # Update semantic version
-    update_semantic_version(args.message, yield_paths(args))
+    ignored = True
+    for message in [args.subject, args.description]:
+        if not message or not is_valid_message(message):
+            continue
+        
+        logger.debug(f"Parsing commit message: {message}")
+        # Update semantic version
+        update_semantic_version(args.message, yield_paths(args))
+        ignored = False
+
+    if ignored:
+        message = "\n\n".join([args.subject, args.description])
+        logger.warning(f"Ignoring Commit:\n\t{message}")
 
 
 if __name__ == "__main__":
