@@ -150,7 +150,7 @@ def main():
 
         logger.debug(f"Parsing commit message: {message}")
         # Update semantic version
-        update_semantic_version(args.message, yield_paths(args))
+        update_semantic_version(message, yield_paths(args))
         ignored = False
         break
 
