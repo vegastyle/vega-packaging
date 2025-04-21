@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.6.2] - 2025/04/21 16:46:21
+
+### Fixed
+
+- replaced args.message with message in the update_semantic_version.py file
+
+
 ## [0.6.1] - 2025/04/21 16:35:15
 
 ### Fixed
