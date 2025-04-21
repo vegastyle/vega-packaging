@@ -147,11 +147,12 @@ def main():
     for message in [args.subject, args.description]:
         if not message or not is_valid_message(message):
             continue
-        
+
         logger.debug(f"Parsing commit message: {message}")
         # Update semantic version
         update_semantic_version(args.message, yield_paths(args))
         ignored = False
+        break
 
     if ignored:
         message = "\n\n".join([args.subject, args.description])
