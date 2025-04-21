@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.6.0] - 2025/04/21 16:27:13
+
+### Added
+
+- subject and body arguments to support reading boths portions of a message, with the description being prioritized for parsing when provided
+
+
 ## [0.5.1] - 2025/04/15 16:33:06
 
 ### Added
