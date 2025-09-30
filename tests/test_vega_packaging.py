@@ -35,6 +35,13 @@ def pyproject_path():
     if os.path.exists(path):
         os.remove(path)
 
+@pytest.fixture
+def docker_compose_path():
+    """Temporary pyproject.toml file for testing"""
+    path = os.path.join(tempfile.tempdir, "docker-compose.yaml")
+    yield path
+    if os.path.exists(path):
+        os.remove(path)
 
 @pytest.fixture
 def githubenv_path():
@@ -194,6 +201,23 @@ def test_pyproject_parser(pyproject_path):
         content = toml.load(handle)
         assert content["project"]["version"] == message.semantic_version
 
+
+def test_docker_compose_parser(docker_compose_path):
+    """Tests that the pyproject parser works as expected"""
+    message = commits.CommitMessage("#major #added added hello_world.py"
+                                    "#removed removed bad vibes")
+
+
+    docker_compose_parser = factory.get_parser_from_path(docker_compose_path)
+    assert docker_compose_parser.FILENAME_REGEX.match("docker-compose.yaml") is not None
+    assert not docker_compose_parser.exists
+    docker_compose_parser.create()
+    assert docker_compose_parser.exists
+    docker_compose_parser.update(message)
+
+    with open(docker_compose_parser.path, "r") as handle:
+        content = toml.load(handle)
+        assert content["version"] == message.semantic_version
 
 def test_github_env_parser(githubenv_path):
     """Tests that the pyproject parser works as expected"""
