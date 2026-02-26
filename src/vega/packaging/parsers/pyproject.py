@@ -1,29 +1,32 @@
 """Module for holding the code for parsing the pyproject.toml files"""
 import os
 import re
+import subprocess
 
 import toml
 
-from vega.packaging import commits, decorators
+from vega.packaging import commits, decorators, const, versions
 from vega.packaging.parsers import abstract_parser
 
 
 class PyProject(abstract_parser.AbstractFileParser):
     """Parser for pyproject.toml files"""
+    NAME = "PyProject"
     FILENAME_REGEX = re.compile("pyproject.toml", re.I)
     TEMPLATE = {"build-system":
                     {"requires": ["setuptools >= 61.0"],
                      "build-backend": "setuptools.build_meta"},
                 "project": {
                     "name": None}}
-    AUTOCREATE = False
     PRIORITY = 1
+    IS_BUILD_FILE = True
+    BUILD_TYPE=const.BuildTypes.PYTHON
 
     @property
     def version(self) -> str:
         """The semantic version parsed from this file."""
         if not self._version:
-            self._version = self.content.get("project", {}).get("version", None)
+            self._version = versions.SemanticVersion(self.content.get("project", {}).get("version", self.DEFAULT_VERSION))
         return self._version
 
     @property
@@ -31,6 +34,13 @@ class PyProject(abstract_parser.AbstractFileParser):
         """The contents of this pyproject.toml file"""
         return super(PyProject, self).content or {}
 
+    @property
+    def package(self) -> str: 
+        """ The name of the package that this file defines if it is file that defines a package build"""
+        if not self._package:
+            self._package = self.read()["project"]["name"] 
+        return self._package
+    
     def create(self):
         """Creates a pyproject.toml file with some default values."""
         content = dict(self.TEMPLATE)
@@ -45,17 +55,47 @@ class PyProject(abstract_parser.AbstractFileParser):
         return toml.load(self.path)
 
     @decorators.autocreate
-    def update(self, commit_message: commits.CommitMessage):
+    def update(self, commit_message: commits.CommitMessage, semantic_version: versions.SemanticVersion|str):
         """Updates the contents of the pyproject.toml file with data from the commit message.
 
         Args:
             commit_message: the message to use for updating this file.
         """
-        self.update_version(commit_message)
+        super(PyProject, self).update(commit_message, semantic_version)
 
         # Update pyproject.toml version
-        self.content["project"]["version"] = self.version
+        self.content["project"]["version"] = str(self.version)
 
         # Update the file
         with open(self.path, "w") as handle:
             toml.dump(self.content, handle)
+
+    def build(self, commit_message=None):
+        """Builds the Python package using uv build."""
+        result = subprocess.run(
+            ["uv", "build"],
+            cwd=os.path.dirname(self.path),
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Build failed: {result.stderr}")
+        # Find the built wheel in dist/
+        dist_dir = os.path.join(os.path.dirname(self.path), "dist")
+        for filename in os.listdir(dist_dir):
+            if filename.endswith(".whl"):
+                self._build = os.path.join(dist_dir, filename)
+                break
+
+    def publish(self, registry=None):
+        """Publishes the Python package using uv publish."""
+        registry = registry or self._registry
+        if not self._build:
+            raise RuntimeError("Must build before publishing")
+        cmd = ["uv", "publish"]
+        if registry:
+            cmd.extend(["--publish-url", registry])
+        cmd.append(self._build)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Publish failed: {result.stderr}")

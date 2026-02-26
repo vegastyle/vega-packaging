@@ -1,12 +1,14 @@
 """Module for holding the parser for the changelog.md file"""
 import re
+import os
 
-from vega.packaging import commits, decorators
+from vega.packaging import commits, decorators, versions
 from vega.packaging.parsers import abstract_parser
 
 
 class Changelog(abstract_parser.AbstractFileParser):
     """Parser for the changelog.md file."""
+    AUTOCREATE = True
     FILENAME_REGEX = re.compile("CHANGELOG.md", re.I)
     TEMPLATE = """# Changelog
     
@@ -38,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         return self._version
 
     @property
+    def package(self) -> str: 
+        """ The name of the package that this file defines if it is file that defines a package build"""
+        if not self._package:
+            self._package = os.path.basename(os.path.dirname(self.path))
+        return self._package
+    
+    @property
     def insert_version_index(self) -> int:
         """The index to insert the new version markdown info"""
         if not self._insert_version_index:
@@ -50,10 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             regex = self.VERSION_REGEX.match(line)
             # At the first match of a semantic version stop and store it for later
             if regex:
-                # We do this to make sure we don't override the
-                self._version = self._version or regex.group("version")
+                # We do this to make sure we don't override the current version if it exists
+                self._version = self._version or versions.SemanticVersion(regex.group("version"))
                 self._insert_version_index = index
                 break
+
+        if not self._version: 
+            self._version = versions.SemanticVersion(self.DEFAULT_VERSION)
 
     def create(self):
         """Creates a changelog file if it doesn't exist with some default values."""
@@ -66,19 +78,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             return list(handle.readlines())
 
     @decorators.autocreate
-    def update(self, commit_message: commits.CommitMessage):
+    def update(self, commit_message: commits.CommitMessage, semantic_version: versions.SemanticVersion|str):
         """Updates the content of the changelog.md file with data from the commit message.
 
         Args:
             commit_message: The message to update the changelog with.
         """
-        self.update_version(commit_message)
+        super(Changelog, self).update(commit_message, semantic_version)
 
         # Add new changelog
         if self.insert_version_index is not None:
-            self.content.insert(self.insert_version_index, commit_message.markdown)
+            self.content.insert(self.insert_version_index, commit_message.markdown(self.version))
         else:
-            self.content.extend(["\n", commit_message.markdown])
+            self.content.extend(["\n", commit_message.markdown(self.version)])
 
         # Update the file
         with open(self.path, "w") as handle:

@@ -1,15 +1,17 @@
 """Module for holding the code for parsing the package.json files of a React Project"""
 import os
 import re
+import subprocess
 
 import json
 
-from vega.packaging import commits, decorators
+from vega.packaging import commits, decorators, const, versions
 from vega.packaging.parsers import abstract_parser
 
 
 class ReactPackage(abstract_parser.AbstractFileParser):
     """Parser for package.json files for React projects"""
+    NAME = ""
     FILENAME_REGEX = re.compile("package.json", re.I)
     TEMPLATE = {
       "name": None,
@@ -24,14 +26,15 @@ class ReactPackage(abstract_parser.AbstractFileParser):
       },
       "devDependencies": {}
     }
-    AUTOCREATE = False
     PRIORITY = 1
+    IS_BUILD_FILE = True
+    BUILD_TYPE=const.BuildTypes.NPM
 
     @property
     def version(self) -> str:
         """The semantic version parsed from this file."""
         if not self._version:
-            self._version = self.content.get("version", None)
+            self._version = versions.SemanticVersion(self.content.get("version", self.DEFAULT_VERSION))
         return self._version
 
     @property
@@ -55,17 +58,51 @@ class ReactPackage(abstract_parser.AbstractFileParser):
             return json.load(handle)
 
     @decorators.autocreate
-    def update(self, commit_message: commits.CommitMessage):
+    def update(self, commit_message: commits.CommitMessage, semantic_version: versions.SemanticVersion|str):
         """Updates the contents of the package.json file with data from the commit message.
 
         Args:
             commit_message: the message to use for updating this file.
         """
-        self.update_version(commit_message)
+        super(ReactPackage, self).update(commit_message, semantic_version)
 
         # Update pyproject.toml version
-        self.content["version"] = self.version
+        self.content["version"] = str(self.version)
 
         # Update the file
         with open(self.path, "w") as handle:
             json.dump(self.content, handle)
+
+    @property
+    def package(self) -> str: 
+        """ The name of the package that this file defines if it is file that defines a package build"""
+        if not self._package:
+            self._package = self.read()["name"] 
+        return self._package
+    
+    def build(self, commit_message=None):
+        """Builds the NPM package."""
+        result = subprocess.run(
+            ["npm", "run", "build"],
+            cwd=os.path.dirname(self.path),
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Build failed: {result.stderr}")
+        self._build = os.path.dirname(self.path)
+
+    def publish(self, registry=None):
+        """Publishes the NPM package."""
+        registry = registry or self._registry
+        cmd = ["npm", "publish"]
+        if registry:
+            cmd.extend(["--registry", registry])
+        result = subprocess.run(
+            cmd,
+            cwd=os.path.dirname(self.path),
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Publish failed: {result.stderr}")

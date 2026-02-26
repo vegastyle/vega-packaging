@@ -3,15 +3,14 @@
 This supports any file that has had a parser made for it.
 """
 import os
-import datetime
 import argparse
-import platform
-import logging
 
 from vega.packaging import commits
 from vega.packaging import factory
+from vega.packaging import io
+from vega.packaging import log
 
-logger = logging.getLogger(__name__)
+logger = log.get(__name__)
 
 
 def parse_args():
@@ -35,79 +34,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def setup_logging(verbose: bool = False, write_to_disk: bool = True):
-    """Sets up logging for this application.
 
-    Args:
-        verbose: write debug and info statements to stdout. Defaults to False.
-        write_to_disk: write logs to disk. Defaults to True.
-    """
-    default_log_directory = os.path.join(os.getcwd(), "logs")
-    current_time = datetime.datetime.now(datetime.UTC).strftime("%Y_%m_%dT%H_%M_%SZ")
-    log_path = os.path.join(default_log_directory, f"update_semantic_version_{current_time}.log")
-    if not os.path.exists(default_log_directory):
-        os.makedirs(default_log_directory)
-
-    log_format = "%(asctime)s %(message)s"
-    log_date_format = "%m/%d/%Y %I:%M:%S %p"
-    logging_level = logging.DEBUG if verbose else logging.WARNING
-    handlers = [logging.StreamHandler()]
-    if write_to_disk:
-        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
-    logging.basicConfig(format=log_format,
-                        datefmt=log_date_format,
-                        handlers=handlers,
-                        level=logging_level)
-
-
-def yield_paths(args: argparse.ArgumentParser):
-    """Yields the paths should be parsed by this cli command based on the contents of the args parser.
-
-    Args:
-        args: the parsed command line arguments
-
-    Yields:
-        str
-    """
-    # yield of files that are direct children of the given directory
-    paths = []
-    logger.debug(f"Scanning {args.directory} for files to update.")
-    for filename in os.listdir(args.directory):
-        if os.path.isfile(filename):
-            path = os.path.join(args.directory, filename)
-            yield path
-            paths.append(path)
-
-    # Add explicitly set paths in args
-    explicit_paths = [args.pyproject_path, args.changelog_path, args.react_package_path]
-    if args.github_env:
-        explicit_paths.append(os.environ.get("GITHUB_ENV", None))
-
-    is_windows = platform.system() == "Windows"
-    for path in explicit_paths:
-        if not path:
-            # Skip none values
-            continue
-        elif (is_windows and not os.path.splitdrive(path)[0]) or (not is_windows and not path.startswith("/")):
-            # If no root path is specified on the explicitly set files
-            # we assume that they are relative to the given directory
-            path = os.path.join(args.directory, path)
-        if path not in paths:
-            yield path
-
-def is_valid_message(message_str: str) -> bool:
-    """Checks if the message string is valid for updating the semantic version.
-
-    Args:
-        message_str: string to be parsed to determine how to update the semantic version
-
-    Returns:
-        bool: True if the message is valid, False otherwise.
-    """
-    return "#" in message_str and "#ignore" not in message_str.lower()
-
-
-def update_semantic_version(message_str: str, paths: list[str]):
+def update_semantic_version(message_str: str, paths: list[str], match=True):
     """Updates the semantic version of the provided file paths ,if they are supported, based on the contents of the message string.
 
     Args:
@@ -116,8 +44,10 @@ def update_semantic_version(message_str: str, paths: list[str]):
     """
  
     # Parse commit message
-    message = commits.CommitMessage(message_str)
-
+    commit_message = commits.CommitMessage(message_str)
+    if not commit_message.is_valid: 
+        return False
+    
     # Get file parsers
     packaging_files = []
 
@@ -129,9 +59,13 @@ def update_semantic_version(message_str: str, paths: list[str]):
 
     # Update files based on parsing priority
     packaging_files.sort(key=lambda value: value.PRIORITY)
+    semantic_version = None
+    if match:
+        semantic_version = packaging_files[0].version.start_value()
+
     for packaging_file in packaging_files:
-        packaging_file.update(message)
-        logger.info(f"Updated {packaging_file.path} with revision number {message.semantic_version}")
+        packaging_file.update(commit_message, semantic_version)
+        logger.info(f"Updated {packaging_file.path} with revision number {packaging_file.version}")
     return True
 
 
@@ -141,18 +75,22 @@ def main():
     args = parse_args()
 
     # Setup logging
-    setup_logging(verbose=args.verbose, write_to_disk=args.log_to_disk)
+    log.setup("update_semantic_version", verbose=args.verbose, write_to_disk=args.log_to_disk)
+
+    # Add explicitly set paths in args
+    explicit_paths = [args.pyproject_path, args.changelog_path, args.react_package_path]
+    if args.github_env:
+        explicit_paths.append(os.environ.get("GITHUB_ENV", None))
 
     ignored = True
     for message in [args.subject, args.description]:
-        if not message or not is_valid_message(message):
-            continue
-
         logger.debug(f"Parsing commit message: {message}")
         # Update semantic version
-        update_semantic_version(message, yield_paths(args))
-        ignored = False
-        break
+        filepath_generator = io.yield_paths(args.directory, explicit_paths)
+        message_parsed = update_semantic_version(message, filepath_generator)
+        if message_parsed:
+            ignored = False
+            break
 
     if ignored:
         message = "\n\n".join([args.subject, args.description])

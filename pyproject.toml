@@ -25,8 +25,14 @@ Changelog = "https://github.com/vegastyle/vega-packaging/blob/main/CHANGELOG.md"
 
 [project.scripts]
 update_semantic_version = "vega.packaging.bootstrappers.update_semantic_version:main"
+build_and_publish = "vega.packaging.bootstrappers.build_and_publish_package:main"
 
 [tool.setuptools.packages.find]
 where = [ "src",]
 include = [ "vega.*",]
 exclude = [ "venv", "tests", ".github",]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests requiring network access to dev registries",
+]

@@ -1,22 +1,22 @@
 """Module for holding the parser for the github env file"""
 import re
 
-from vega.packaging import commits, decorators
+from vega.packaging import commits, decorators, versions
 from vega.packaging.parsers import abstract_parser
 
 
 class GitEnv(abstract_parser.AbstractFileParser):
     """Parser for the git env file."""
+    NAME = "GitEnv"
     FILENAME_REGEX = re.compile("set_env_[a-z0-9-]+", re.I)
     TEMPLATE = ""
-    AUTOCREATE = False
     PRIORITY = 5
 
     @property
     def version(self) -> str:
         """The semantic version parsed from this changelog.md file."""
         if not self._version:
-            self._version = self.content.get("SEMANTIC_VERSION", None)
+            self._version = versions.SemanticVersion(self.content.get("SEMANTIC_VERSION", self.DEFAULT_VERSION))
         return self._version
 
     def create(self):
@@ -38,16 +38,16 @@ class GitEnv(abstract_parser.AbstractFileParser):
         return content
 
     @decorators.autocreate
-    def update(self, commit_message: commits.CommitMessage):
+    def update(self, commit_message: commits.CommitMessage, semantic_version: versions.SemanticVersion|str):
         """Updates the content of the changelog.md file with data from the commit message.
 
         Args:
             commit_message: The message to update the changelog with.
         """
-        self.update_version(commit_message)
+        super(GitEnv, self).update(commit_message, semantic_version)
 
         # Add semantic version environment variable to the GitHub env
-        self.content["SEMANTIC_VERSION"] = commit_message.semantic_version
+        self.content["SEMANTIC_VERSION"] = str(self.version)
 
         # Update the file
         with open(self.path, "w") as handle:

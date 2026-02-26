@@ -2,7 +2,7 @@
 import os
 import logging
 
-from vega.packaging import commits
+from vega.packaging import commits, versions
 
 
 logger = logging.getLogger(__name__)
@@ -12,11 +12,14 @@ class AbstractFileParser:
     """Abstract file parser class for creating new file parsers."""
     FILENAME_REGEX = None
     TEMPLATE = None
-    AUTOCREATE = True
+    AUTOCREATE = False
     DEFAULT_VERSION = "0.0.0"
     PRIORITY = 5
+    HAS_VERSION = True
+    IS_BUILD_FILE = False
+    BUILD_TYPE = None
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, version: versions.SemanticVersion =None):
         """Constructor
 
         Args:
@@ -24,7 +27,11 @@ class AbstractFileParser:
         """
         self.__path = path
         self._content = None
-        self._version = None
+        self._version = version
+        self._build = None
+        self._registry = None
+        self._registry_version = None
+        self._package = None
 
     @property
     def path(self) -> str:
@@ -50,9 +57,40 @@ class AbstractFileParser:
         return self._content
 
     @property
+    def registry(self):
+        """ The name of the registry where the package this file belongs to gets published to""" 
+        return self._registry
+    
+    @registry.setter
+    def registry(self, value=None):
+        """ The name of the registry where the package this file belongs to gets published to""" 
+        self._registry = value
+
+    @property
+    def registry_version(self):
+        """ The version to use when publishing to the registry, this maybe different from the version of the file.
+        Defaults to the file version
+        """ 
+        return self._registry_version or self.version
+    
+    @registry_version.setter
+    def registry_version(self, value=None):
+        """ The name of the registry where the package this file belongs to gets published to""" 
+        self._registry_version = value
+
+    @property
+    def package(self) -> str: 
+        """ The name of the package that this file belongs to"""
+        raise NotImplementedError("This abstract method needs to be reimplemented")
+
+    @property
     def version(self) -> str:
         """The semantic version parsed from this file"""
         raise NotImplementedError("This abstract method needs to be reimplemented")
+
+    @version.setter
+    def version(self, value):
+        self._version = value
 
     def reset(self):
         """Resets the values of the object so they get parsed again.
@@ -70,26 +108,16 @@ class AbstractFileParser:
         """Reads the file on disk."""
         raise NotImplementedError("This abstract method needs to be reimplemented")
 
-    def update(self, commit_message: commits.CommitMessage):
+    def update(self, commit_message: commits.CommitMessage, semantic_version: versions.SemanticVersion|str):
         """Updates the data of the file"""
+        if semantic_version: 
+            self._version = versions.SemanticVersion(semantic_version)
+        self.version.bump(commit_message.semantic_version_bump)
+
+    def build(self, version=None, registry=None):
+        """Builds a package for that uses this file"""
         raise NotImplementedError("This abstract method needs to be reimplemented")
-
-    def update_version(self, commit_message: commits.CommitMessage):
-        """Updates the semantic version value of this file based on the data of the commit message.
-
-        If the commit message does not have a semantic version, the value parsed from this file is used instead.
-        If the commit message has a pending version bump, that version bump is applied.
-        """
-        if not commit_message.semantic_version and self.version:
-            logger.debug(f"Setting current semantic version to {self.version} from {self.filename}")
-            commit_message.semantic_version = self.version
-
-        elif not commit_message.semantic_version:
-            logger.debug(f"Setting current semantic version to the default {self.DEFAULT_VERSION} from {self.filename}")
-            commit_message.semantic_version = self.DEFAULT_VERSION
-            commit_message.bump = commit_message.bump or commits.Versions.MINOR
-
-        if commit_message.bump:
-            commit_message.bump_semantic_version()
-
-        self._version = commit_message.semantic_version
+    
+    def publish(self, version=None, registry=None):
+        """Publishes this file to a repository"""
+        raise NotImplementedError("This abstract method needs to be reimplemented")

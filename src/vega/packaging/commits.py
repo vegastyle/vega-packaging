@@ -7,34 +7,15 @@ import datetime
 import enum
 import re
 
+from vega.packaging import const
+
 logger = logging.getLogger(__name__)
-
-
-class Versions(enum.Enum):
-    """ Enums for the different semantic verions"""
-    MAJOR = 0
-    MINOR = 1
-    PATCH = 2
-
-
-class Changes(enum.Enum):
-    """Enum for the different possible changelog categories as determined by Keepchangelog.com"""
-    # Keepchangelog.com standard changes
-    ADDED = "added"
-    CHANGED = "changed"
-    DEPRECATED = "deprecated"
-    REMOVED = "removed"
-    FIXED = "fixed"
-    SECURITY = "security"
-
-    # Custom tags for indicating other changes
-    UPDATED = "changed"
 
 
 class CommitMessage:
     """Parses a commit message from a version control system."""
 
-    def __init__(self, message: str, date: str = None, auto_parse: bool = True, default_bump: Versions = None):
+    def __init__(self, message: str, date: str = None, auto_parse: bool = True, default_bump: const.Versions = None):
         """Constructor
 
         Args:
@@ -46,9 +27,11 @@ class CommitMessage:
         """
         self.__message = message
         self.__date = date or datetime.datetime.today().strftime("%Y/%m/%d %H:%M:%S")
+        self._bump = default_bump
 
-        self.semantic_version = None
-        self.bump = default_bump
+        self.semantic_version_bump = None
+        self.publish_tags = None
+        self.build = False
         self.changes = {}
 
         if auto_parse:
@@ -65,18 +48,13 @@ class CommitMessage:
         return self.__date
 
     @property
-    def markdown(self) -> str:
-        """Converts the changelog dict into a markdown string that follows the Keep A Changelog Format."""
-        # Add new header section for the latest updates
-        content = [f"## [{self.semantic_version}] - {self.date}"]
-        # Add list of changes
-        for change_section in Changes:
-            if change_section in self.changes:
-                content.append(f"\n### {change_section.value.capitalize()}\n")
-                for change in self.changes[change_section]:
-                    content.append(f"- {change}")
-        content.append("\n\n")  # Create an extra buffer between new change logs
-        return "\n".join(content)
+    def is_valid(self) -> bool:
+        """Checks if the message string is valid for updating the semantic version.
+
+        Returns:
+            bool: True if the message is valid, False otherwise.
+        """
+        return "#" in self.__message and "#ignore" not in self.__message.lower()
 
     def parse(self):
         """Parses the commit message from a version control system and to get the messages that make it up.
@@ -92,53 +70,32 @@ class CommitMessage:
             if message_section.startswith("#"):
                 key = None
                 tag = message_section[1:].upper()
-                if getattr(Versions, tag, None) in Versions:
-                    self.bump = getattr(Versions, tag)
+                tag_enum = getattr(const.Versions, tag, None) or getattr(const.Changes, tag.upper(), None)
 
-                elif getattr(Changes, tag, None) in Changes:
-                    key = getattr(Changes, tag.upper())
+                if isinstance(tag_enum, const.Versions) and (self.semantic_version_bump is None or tag_enum.value < self.semantic_version_bump.value):
+                    self.semantic_version_bump = tag_enum
+
+                elif isinstance(tag_enum, const.Changes):
+                    key = tag_enum.name
 
                 continue
 
-            if key in Changes and message_section:
+            if key is not None and message_section:
                 self.changes.setdefault(key, []).append(message_section.strip())
 
-    def bump_semantic_version(self):
-        """Helper method for bumping the internal semantic version number.
+        # Fall back to default bump if no version tag was found
+        if self.semantic_version_bump is None:
+            self.semantic_version_bump = self._bump
 
-        Using this method consumes the value of bump and sets it back to None
-        """
-        if not self.semantic_version:
-            raise ValueError("No value set for the semantic version associated with this commit message")
-
-        self.semantic_version = bump_semantic_version(self.semantic_version, self.bump)
-        self.bump = None
-
-
-def bump_semantic_version(current_version: str, version_bump: enum.Enum) -> str:
-    """
-    Bumps the current semantic version number
-
-    Arg:
-        current_version (str): The current semantic version that needs to be updated.
-                               Expects the format to be [major].[minor].[patch].
-        version_bump (str): The version number to bump. Expects the values 'major', 'minor', 'patch'.
-
-    Return:
-        str
-    """
-    logger.debug(f"Performing {version_bump.name.lower()} bump")
-    version_numbers = current_version.split(".")
-
-    for index, value in enumerate(version_numbers[version_bump.value:]):
-        version_index = version_bump.value + index
-        if not index:
-            # Bump the value of the given version category
-            version_numbers[version_index] = str(int(value) + 1)
-            continue
-        # Reset any version categories that follow to zero
-        version_numbers[version_index] = "0"
-
-    resolved_version = ".".join(version_numbers)
-    logger.debug(f"Bumped semantic version to {resolved_version}")
-    return resolved_version
+    def markdown(self, semantic_version) -> str:
+        """Converts the changelog dict into a markdown string that follows the Keep A Changelog Format."""
+        # Add new header section for the latest updates
+        content = [f"## [{semantic_version}] - {self.date}"]
+        # Add list of changes
+        for change_section in const.Changes:
+            if change_section.name in self.changes:
+                content.append(f"\n### {change_section.value.capitalize()}\n")
+                for change in self.changes[change_section.name]:
+                    content.append(f"- {change}")
+        content.append("\n\n")  # Create an extra buffer between new change logs
+        return "\n".join(content)
