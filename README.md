@@ -2,9 +2,17 @@
 > Python package for creating and editing files required for packaging code based on commit messages.
 
 This python package contains utility code relating to packaging workflows such as versioning, creating required files 
-from templates, testing builds, etc. based on the commit messages when that code wa updated.  
+from templates, testing builds, etc. based on the commit messages when that code was updated.
 
-At the time of writing this package only supports working with python packages.
+---
+## Supported Build Types
+
+| Type   | File          | Description                                                        |
+|--------|---------------|--------------------------------------------------------------------|
+| Python | pyproject.toml | Builds and publishes Python packages to PyPI or a private registry |
+| NPM    | package.json  | Builds and publishes NPM packages to a registry                    |
+| Docker | Dockerfile    | Builds and pushes Docker images to a container registry            |
+| Rust   | Cargo.toml    | Packages/publishes Rust crates and cross-compiles release binaries |
 
 ---
 ## How to install
@@ -50,6 +58,28 @@ print(commit_message.semantic_version) # "0.1.1"
 
 ```
 ---
+## build_and_publish CLI
+Installing this package provides access to the **build_and_publish** cli command.
+This command builds, publishes, and/or creates a release for packages found in the current directory.
+
+### Basic Usage
+```commandline
+build_and_publish --publish --release
+```
+
+#### Key Flags
+* **--publish** — Build and publish packages to their registries (PyPI, npm, crates.io, Docker registry).
+* **--release** — Create a GitHub release, attaching any staged release artifacts (e.g. cross-compiled binaries).
+* **--compile_only** — Cross-compile Rust release binaries and stage them under `bin/<arch>/` without creating a release.
+  Combine with `--publish` to publish to crates.io at the same time:
+  ```commandline
+  build_and_publish --publish --compile_only
+  ```
+* **--release_provider** — Release provider to use. Currently supports `github` (default).
+* **--cargo_path** — Explicit path to a `Cargo.toml` file.
+* **--pypi_registry** / **--npm_registry** / **--docker_registry** / **--cargo_registry** — Registry overrides for each build type.
+
+---
 ## update_semantic_version CLI
 Installing this package provides access to the **update_semantic_version** cli command. 
 This command updates the semantic version in various files of a directory. 
@@ -94,27 +124,46 @@ Supported files are parsed in order of priority, with 1 being the highest priori
 * **--pyproject_path**
   * Optional Argument: 
   * Path to the pyproject.toml file to update. It doesn't create one if it doesn't exist.<br><br>
+* **--cargo_path**
+  * Optional Argument
+  * Path to the `Cargo.toml` file to update.<br><br>
 * **--github_env**
   * Optional Flag
-  * When set, it looks for the github.env file from the GITHUB_ENV environment variable and sets the semantic version to the SEMANTIC_VERSION environment variable. 
+  * When set, it looks for the GitHub env file from the `GITHUB_ENV` environment variable and:
+    * Sets `SEMANTIC_VERSION` to the new semantic version.
+    * Sets `PUBLISH` and `RELEASE` flags based on the commit hashtags.
+    * Sets `BUILD_RUST=True`, `BUILD_PYTHON=True`, `BUILD_NPM=True`, and/or `BUILD_DOCKER=True` for each build file type found in the directory.
 
-#### Currently Supported Files
-As of version 0.2.0 the following files are supported and their parsing priority: 
-* **CHANGELOG.md**
-  * Priority: 2
-* **pyproject.toml**
-  * Priority: 1
-* **GitHub env file**
-  * Priority: 5
-  * GitHub Env files follow the naming convention of set_env_* where the asterisk is a unique identifier for the workflow sessions that it was generated for. 
-    * Example filename: set_env_86bd2d54-09b3-476f-8235-5936444c37fa
+#### Supported Files
+The following files are supported and their parsing priority (1 = highest):
+* **pyproject.toml** — Priority: 1
+* **Cargo.toml** — Priority: 1
+* **CHANGELOG.md** — Priority: 2
+* **package.json** — Priority: 3
+* **Dockerfile** — Priority: 4
+* **GitHub env file** — Priority: 5
+  * GitHub Env files follow the naming convention of `set_env_*` where the asterisk is a unique identifier for the workflow session.
+    * Example filename: `set_env_86bd2d54-09b3-476f-8235-5936444c37fa`
     
 ---
 ## Adding Support for Other Files
 This package supports a plugin design pattern to dynamically resolve how to parse individual files. 
 
 ### Creating a New Plugin
-You can create a new plugin by using the AbstractFileParser class from vega.packaging.parsers to create a new class. 
+You can create a new plugin by using the `AbstractFileParser` class from `vega.packaging.parsers` to create a new class.
+
+Key class-level attributes:
+* **`FILENAME_REGEX`** — Regex pattern matched against filenames to identify which parser handles which file.
+* **`IS_BUILD_FILE`** — Set to `True` if this file represents a buildable package (enables `build_and_publish` support).
+* **`BUILD_TYPE`** — A `const.BuildTypes` enum value identifying the build ecosystem (e.g. `BuildTypes.RUST`).
+* **`RELEASE_PATH`** — Directory (relative to the parser file's directory) where release artifacts are staged. Set to `None` if this build type has no release artifacts.
+* **`PRIORITY`** — Parse/update order; lower number = higher priority.
+
+Key methods to implement:
+* **`build()`** — Build the package (e.g. `cargo package`, `pip wheel`).
+* **`publish()`** — Publish the package to a registry.
+* **`release()`** — Compile/stage release artifacts (e.g. cross-compiled binaries) under `RELEASE_PATH`. Called by `build_and_publish --compile_only`.
+
 
 #### Example
 ```python

@@ -363,8 +363,8 @@ def test_update_semantic_version_python(temp_python_project):
     # Check generated files
     message = commits.CommitMessage(message_str)
 
-    # Check changelog.md
-    changelog_path = os.path.join(temp_python_project, "changelog.md")
+    # Check CHANGELOG.md
+    changelog_path = os.path.join(temp_python_project, "CHANGELOG.md")
     changelog_cls = factory.get_parser_cls_by_filename("changelog.md")
 
     content = f"{changelog_cls.TEMPLATE}\n{message.markdown('0.1.0')}"
@@ -393,8 +393,8 @@ def test_update_semantic_version_react(temp_react_project):
     # Check generated files
     message = commits.CommitMessage(message_str)
 
-    # Check changelog.md
-    changelog_path = os.path.join(temp_react_project, "changelog.md")
+    # Check CHANGELOG.md
+    changelog_path = os.path.join(temp_react_project, "CHANGELOG.md")
     changelog_cls = factory.get_parser_cls_by_filename("changelog.md")
 
     content = f"{changelog_cls.TEMPLATE}\n{message.markdown('0.1.0')}"
@@ -406,3 +406,197 @@ def test_update_semantic_version_react(temp_react_project):
 
     with open(pyproject_path, "r") as handle:
         assert json.load(handle)["version"] == "0.1.0"
+
+
+# ============================================================================
+# Tests for Cargo parser
+# ============================================================================
+
+@pytest.fixture
+def temp_cargo_project():
+    """Temporary Cargo project directory for testing."""
+    path = os.path.join(tempfile.tempdir, "test_cargo_packaging")
+    cargo_path = os.path.join(path, "Cargo.toml")
+    if not os.path.exists(path):
+        os.mkdir(path)
+        with open(cargo_path, "w+") as handle:
+            handle.write('[package]\nname = "test_crate"\nversion = "0.0.0"\nedition = "2021"\n')
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
+
+
+def test_cargo_parser_update(temp_cargo_project):
+    """Test that Cargo.update() bumps the version under [package]."""
+    from unittest import mock
+    cargo_path = os.path.join(temp_cargo_project, "Cargo.toml")
+    parser = factory.get_parser_from_path(cargo_path)
+
+    message = commits.CommitMessage("#minor #added added a feature")
+    parser.update(message, None)
+
+    with open(cargo_path, "r") as handle:
+        content = toml.load(handle)
+    assert content["package"]["version"] == "0.1.0"
+
+
+def test_cargo_build_success(temp_cargo_project):
+    """Test Cargo.build() calls cargo package and sets _build to .crate path."""
+    from unittest import mock
+    cargo_path = os.path.join(temp_cargo_project, "Cargo.toml")
+    parser = factory.get_parser_from_path(cargo_path)
+
+    package_dir = os.path.join(temp_cargo_project, "target", "package")
+    os.makedirs(package_dir, exist_ok=True)
+    crate_path = os.path.join(package_dir, "test_crate-0.0.0.crate")
+    with open(crate_path, "w") as f:
+        f.write("fake crate")
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+
+    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        parser.build()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["cargo", "package"]
+        assert call_args[1]["cwd"] == temp_cargo_project
+
+    assert parser._build.endswith(".crate")
+
+
+def test_cargo_publish_success(temp_cargo_project):
+    """Test Cargo.publish() calls cargo publish without --registry when none set."""
+    from unittest import mock
+    cargo_path = os.path.join(temp_cargo_project, "Cargo.toml")
+    parser = factory.get_parser_from_path(cargo_path)
+    parser._build = "/fake/path/test_crate-0.0.0.crate"
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+
+    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        parser.publish()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["cargo", "publish"]
+
+
+def test_cargo_publish_with_registry(temp_cargo_project):
+    """Test Cargo.publish() includes --registry when a registry is set."""
+    from unittest import mock
+    cargo_path = os.path.join(temp_cargo_project, "Cargo.toml")
+    parser = factory.get_parser_from_path(cargo_path)
+    parser._build = "/fake/path/test_crate-0.0.0.crate"
+    parser._registry = "my-registry"
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+
+    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        parser.publish()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["cargo", "publish", "--registry", "my-registry"]
+
+
+def test_cargo_publish_without_build(temp_cargo_project):
+    """Test Cargo.publish() raises error if build() wasn't called first."""
+    cargo_path = os.path.join(temp_cargo_project, "Cargo.toml")
+    parser = factory.get_parser_from_path(cargo_path)
+    import pytest
+    with pytest.raises(RuntimeError, match="Must build before publishing"):
+        parser.publish()
+
+
+# ============================================================================
+# Tests for #publish / #release commit keywords
+# ============================================================================
+
+def test_commit_publish_keyword():
+    """#publish sets publish=True, release=False."""
+    message = commits.CommitMessage("#minor #publish add new feature")
+    assert message.publish is True
+    assert message.release is False
+
+
+def test_commit_release_keyword():
+    """#release sets release=True, publish=False."""
+    message = commits.CommitMessage("#minor #release add new feature")
+    assert message.publish is False
+    assert message.release is True
+
+
+def test_commit_publish_and_release_keywords():
+    """#publish #release sets both to True."""
+    message = commits.CommitMessage("#minor #publish #release add new feature")
+    assert message.publish is True
+    assert message.release is True
+
+
+def test_commit_no_workflow_keywords():
+    """No workflow keyword leaves both False."""
+    message = commits.CommitMessage("#minor #added add new feature")
+    assert message.publish is False
+    assert message.release is False
+
+
+# ============================================================================
+# Tests for changelog.changes()
+# ============================================================================
+
+MULTI_VERSION_CHANGELOG = """\
+# Changelog
+
+## [1.1.0] - 2024/01/01
+### Added
+- feature two
+
+## [1.0.0] - 2023/01/01
+### Added
+- feature one
+
+## [0.1.0] - 2022/01/01
+### Added
+- initial release
+"""
+
+
+@pytest.fixture
+def multi_version_changelog(tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(MULTI_VERSION_CHANGELOG)
+    return str(path)
+
+
+def test_changes_latest(multi_version_changelog):
+    """changes() with no args returns the latest versioned section."""
+    parser = factory.get_parser_from_path(multi_version_changelog)
+    result = parser.changes()
+    assert result.startswith("## [1.1.0]")
+    assert "## [1.0.0]" not in result
+
+
+def test_changes_specific_version(multi_version_changelog):
+    """changes("1.0.0") returns just that section."""
+    parser = factory.get_parser_from_path(multi_version_changelog)
+    result = parser.changes("1.0.0")
+    assert result.startswith("## [1.0.0]")
+    assert "## [1.1.0]" not in result
+    assert "## [0.1.0]" not in result
+
+
+def test_changes_version_range(multi_version_changelog):
+    """changes("1.1.0", "0.1.0") returns sections from 1.1.0 down to (not including) 0.1.0."""
+    parser = factory.get_parser_from_path(multi_version_changelog)
+    result = parser.changes("1.1.0", "0.1.0")
+    assert "## [1.1.0]" in result
+    assert "## [1.0.0]" in result
+    assert "## [0.1.0]" not in result
+
+
+def test_changes_missing_version(multi_version_changelog):
+    """changes() for a version that doesn't exist returns empty string."""
+    parser = factory.get_parser_from_path(multi_version_changelog)
+    result = parser.changes("9.9.9")
+    assert result == ""

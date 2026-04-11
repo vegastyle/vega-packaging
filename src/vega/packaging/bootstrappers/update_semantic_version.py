@@ -25,6 +25,7 @@ def parse_args():
     parser.add_argument("-c", "--changelog_path", help="path to the changelog markdown file to update")
     parser.add_argument("-p", "--pyproject_path", help="path to the pyproject to update")
     parser.add_argument("-r", "--react_package_path", help="path to the react package.json file to update")
+    parser.add_argument("--cargo_path", help="path to the Cargo.toml file to update")
     parser.add_argument("-g", "--github_env", help="set the semantic revision env variable on git",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-v", "--verbose", help="print out debug statements",
@@ -78,7 +79,7 @@ def main():
     log.setup("update_semantic_version", verbose=args.verbose, write_to_disk=args.log_to_disk)
 
     # Add explicitly set paths in args
-    explicit_paths = [args.pyproject_path, args.changelog_path, args.react_package_path]
+    explicit_paths = [args.pyproject_path, args.changelog_path, args.react_package_path, args.cargo_path]
     if args.github_env:
         explicit_paths.append(os.environ.get("GITHUB_ENV", None))
 
@@ -95,6 +96,19 @@ def main():
     if ignored:
         message = "\n\n".join([args.subject, args.description])
         logger.warning(f"Ignoring Commit:\n\t{message}")
+    elif args.github_env:
+        github_env_path = os.environ.get("GITHUB_ENV", "")
+        if github_env_path:
+            seen_build_types = set()
+            for path in io.yield_paths(args.directory, explicit_paths):
+                pf = factory.get_parser_from_path(path)
+                if pf and pf.IS_BUILD_FILE and pf.BUILD_TYPE is not None:
+                    seen_build_types.add(pf.BUILD_TYPE)
+            with open(github_env_path, "a") as gh_env:
+                for build_type in seen_build_types:
+                    env_key = f"BUILD_{build_type.name}"
+                    gh_env.write(f"{env_key}=True\n")
+                    logger.info(f"Wrote {env_key}=True to GITHUB_ENV")
 
 
 if __name__ == "__main__":

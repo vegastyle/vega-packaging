@@ -26,9 +26,10 @@ class ReactPackage(abstract_parser.AbstractFileParser):
       },
       "devDependencies": {}
     }
+    DEFAULT_REGISTRY = "https://registry.npmjs.org/"
     PRIORITY = 1
     IS_BUILD_FILE = True
-    BUILD_TYPE=const.BuildTypes.NPM
+    BUILD_TYPE = const.BuildTypes.NPM
 
     @property
     def version(self) -> str:

@@ -18,6 +18,7 @@ class AbstractFileParser:
     HAS_VERSION = True
     IS_BUILD_FILE = False
     BUILD_TYPE = None
+    RELEASE_PATH = None
 
     def __init__(self, path: str, version: versions.SemanticVersion =None):
         """Constructor
@@ -115,9 +116,13 @@ class AbstractFileParser:
         self.version.bump(commit_message.semantic_version_bump)
 
     def build(self, version=None, registry=None):
-        """Builds a package for that uses this file"""
+        """Builds a package that uses this file"""
         raise NotImplementedError("This abstract method needs to be reimplemented")
     
     def publish(self, version=None, registry=None):
         """Publishes this file to a repository"""
+        raise NotImplementedError("This abstract method needs to be reimplemented")
+
+    def release(self, version=None, registry=None):
+        """Publishes this file to github as a release. Requires the build step to complete."""
         raise NotImplementedError("This abstract method needs to be reimplemented")

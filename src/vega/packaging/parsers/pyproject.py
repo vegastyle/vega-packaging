@@ -18,9 +18,10 @@ class PyProject(abstract_parser.AbstractFileParser):
                      "build-backend": "setuptools.build_meta"},
                 "project": {
                     "name": None}}
+    DEFAULT_REGISTRY = "https://upload.pypi.org/legacy/"
     PRIORITY = 1
     IS_BUILD_FILE = True
-    BUILD_TYPE=const.BuildTypes.PYTHON
+    BUILD_TYPE = const.BuildTypes.PYTHON
 
     @property
     def version(self) -> str:
@@ -71,9 +72,9 @@ class PyProject(abstract_parser.AbstractFileParser):
             toml.dump(self.content, handle)
 
     def build(self, commit_message=None):
-        """Builds the Python package using uv build."""
+        """Builds the Python package."""
         result = subprocess.run(
-            ["uv", "build"],
+            ["uv", "run", "python", "-m", "build"],
             cwd=os.path.dirname(self.path),
             capture_output=True,
             text=True
@@ -88,13 +89,13 @@ class PyProject(abstract_parser.AbstractFileParser):
                 break
 
     def publish(self, registry=None):
-        """Publishes the Python package using uv publish."""
+        """Publishes the Python package using twine."""
         registry = registry or self._registry
         if not self._build:
             raise RuntimeError("Must build before publishing")
-        cmd = ["uv", "publish"]
+        cmd = ["uv", "run", "python", "-m", "twine", "upload"]
         if registry:
-            cmd.extend(["--publish-url", registry])
+            cmd.extend(["--repository-url", registry])
         cmd.append(self._build)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:

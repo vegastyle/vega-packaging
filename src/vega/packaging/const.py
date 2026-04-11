@@ -25,6 +25,16 @@ class BuildTypes(enum.Enum):
     PYTHON = "python"
     NPM = "npm"
     DOCKER = "docker"
+    RUST = "rust"
+
+class WorkflowTypes(enum.Enum):
+    IGNORE = "ignore"
+    PUBLISH = "publish"
+    RELEASE = "release"
+
+class Platforms(enum.Enum):
+    GITHUB = "github"
+    GITLAB = "gitlab"
 
 class Builds(enum.Enum):
     DEVELOPMENT = "development"

@@ -10,7 +10,7 @@ class GitEnv(abstract_parser.AbstractFileParser):
     NAME = "GitEnv"
     FILENAME_REGEX = re.compile("set_env_[a-z0-9-]+", re.I)
     TEMPLATE = ""
-    PRIORITY = 5
+    PRIORITY = 4
 
     @property
     def version(self) -> str:
@@ -48,6 +48,8 @@ class GitEnv(abstract_parser.AbstractFileParser):
 
         # Add semantic version environment variable to the GitHub env
         self.content["SEMANTIC_VERSION"] = str(self.version)
+        self.content["PUBLISH"] = str(commit_message.publish)
+        self.content["RELEASE"] = str(commit_message.release)
 
         # Update the file
         with open(self.path, "w") as handle:

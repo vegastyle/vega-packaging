@@ -31,7 +31,8 @@ class CommitMessage:
 
         self.semantic_version_bump = None
         self.publish_tags = None
-        self.build = False
+        self.publish = False
+        self.release = False
         self.changes = {}
 
         if auto_parse:
@@ -70,13 +71,21 @@ class CommitMessage:
             if message_section.startswith("#"):
                 key = None
                 tag = message_section[1:].upper()
-                tag_enum = getattr(const.Versions, tag, None) or getattr(const.Changes, tag.upper(), None)
+                tag_enum = (getattr(const.Versions, tag, None) or
+                            getattr(const.Changes, tag.upper(), None) or
+                            getattr(const.WorkflowTypes, tag.upper(), None))
 
                 if isinstance(tag_enum, const.Versions) and (self.semantic_version_bump is None or tag_enum.value < self.semantic_version_bump.value):
                     self.semantic_version_bump = tag_enum
 
                 elif isinstance(tag_enum, const.Changes):
                     key = tag_enum.name
+
+                elif isinstance(tag_enum, const.WorkflowTypes):
+                    if tag_enum == const.WorkflowTypes.PUBLISH:
+                        self.publish = True
+                    elif tag_enum == const.WorkflowTypes.RELEASE:
+                        self.release = True
 
                 continue
 

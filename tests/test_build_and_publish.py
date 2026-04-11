@@ -78,37 +78,27 @@ def temp_docker_project():
 # Tests for build_and_publish_package.py
 # ============================================================================
 
-def test_build_and_publish_invalid_message():
-    """Test that build_and_publish returns False for invalid messages"""
-    # Message without hashtag is invalid
-    result = build_and_publish_package.build_and_publish("no hashtag here", [])
-    assert result is False
-
-    # Message with #ignore is invalid
-    result = build_and_publish_package.build_and_publish("#ignore this message", [])
+def test_build_and_publish_no_flags():
+    """Test that build_and_publish returns False when neither publish nor release is set."""
+    result = build_and_publish_package.build_and_publish([])
     assert result is False
 
 
-def test_build_and_publish_no_repositories():
-    """Test that build_and_publish returns True but does nothing without repositories"""
-    message_str = "#minor #added test feature"
-    result = build_and_publish_package.build_and_publish(message_str, [], repositories={})
+def test_build_and_publish_publish_flag_no_files():
+    """Test that build_and_publish returns True with publish=True but no qualifying files."""
+    result = build_and_publish_package.build_and_publish([], publish=True)
     assert result is True
 
 
 def test_build_and_publish_filters_non_build_files(temp_python_project):
-    """Test that build_and_publish only processes IS_BUILD_FILE parsers"""
-    # Create a changelog file (not a build file)
+    """Test that build_and_publish only processes IS_BUILD_FILE parsers."""
     changelog_path = os.path.join(temp_python_project, "CHANGELOG.md")
     with open(changelog_path, "w") as f:
         f.write("# Changelog\n")
 
-    message_str = "#minor #added test"
     paths = [changelog_path]
-    repositories = {const.BuildTypes.PYTHON: "https://test.pypi.org/legacy/"}
-
-    # Should return True but not process changelog (it's not a build file)
-    result = build_and_publish_package.build_and_publish(message_str, paths, repositories)
+    # changelog is not a build file; should return True but do nothing
+    result = build_and_publish_package.build_and_publish(paths, publish=True)
     assert result is True
 
 
@@ -462,17 +452,15 @@ def test_parser_package_property(temp_python_project, temp_react_project, temp_d
 # ============================================================================
 
 def test_build_and_publish_python_integration(temp_python_project):
-    """Integration test for build_and_publish with Python project (mocked subprocess)"""
+    """Integration test: publish=True builds and publishes Python project."""
     pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
 
-    # Create a fake dist directory with a wheel file
     dist_dir = os.path.join(temp_python_project, "dist")
     os.makedirs(dist_dir, exist_ok=True)
     wheel_path = os.path.join(dist_dir, "test-0.1.0-py3-none-any.whl")
     with open(wheel_path, "w") as f:
         f.write("fake wheel")
 
-    message_str = "#minor #added test feature"
     paths = [pyproject_path]
     repositories = {const.BuildTypes.PYTHON: "https://test.pypi.org/legacy/"}
 
@@ -481,18 +469,16 @@ def test_build_and_publish_python_integration(temp_python_project):
     mock_result.stderr = ""
 
     with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
-        result = build_and_publish_package.build_and_publish(message_str, paths, repositories)
+        result = build_and_publish_package.build_and_publish(paths, repositories=repositories, publish=True)
 
         assert result is True
-        # Should have been called twice: once for build, once for publish
         assert mock_run.call_count == 2
 
 
 def test_build_and_publish_react_integration(temp_react_project):
-    """Integration test for build_and_publish with React project (mocked subprocess)"""
+    """Integration test: publish=True builds and publishes React project."""
     package_path = os.path.join(temp_react_project, "package.json")
 
-    message_str = "#minor #added test feature"
     paths = [package_path]
     repositories = {const.BuildTypes.NPM: "https://npm.pkg.github.com"}
 
@@ -501,18 +487,33 @@ def test_build_and_publish_react_integration(temp_react_project):
     mock_result.stderr = ""
 
     with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
-        result = build_and_publish_package.build_and_publish(message_str, paths, repositories)
+        result = build_and_publish_package.build_and_publish(paths, repositories=repositories, publish=True)
 
         assert result is True
-        # Should have been called twice: once for build, once for publish
         assert mock_run.call_count == 2
 
 
-def test_build_and_publish_docker_integration(temp_docker_project):
-    """Integration test for build_and_publish with Docker project (mocked subprocess)"""
+def test_build_and_publish_docker_skipped_without_registry(temp_docker_project):
+    """Integration test: Docker is skipped without explicit registry."""
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
 
-    message_str = "#minor #added test feature"
+    paths = [dockerfile_path]
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+
+    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        result = build_and_publish_package.build_and_publish(paths, publish=True)
+
+        assert result is True
+        assert mock_run.call_count == 0
+
+
+def test_build_and_publish_docker_integration(temp_docker_project):
+    """Integration test: Docker is included when explicit registry is provided."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+
     paths = [dockerfile_path]
     repositories = {const.BuildTypes.DOCKER: "ghcr.io/testuser"}
 
@@ -521,26 +522,23 @@ def test_build_and_publish_docker_integration(temp_docker_project):
     mock_result.stderr = ""
 
     with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
-        result = build_and_publish_package.build_and_publish(message_str, paths, repositories)
+        result = build_and_publish_package.build_and_publish(paths, repositories=repositories, publish=True)
 
         assert result is True
-        # Should have been called twice: once for build, once for publish
         assert mock_run.call_count == 2
 
 
 def test_build_and_publish_multiple_types(temp_python_project, temp_react_project):
-    """Integration test for build_and_publish with multiple project types"""
+    """Integration test: publish=True builds + publishes both Python and React projects."""
     pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
     package_path = os.path.join(temp_react_project, "package.json")
 
-    # Create a fake dist directory for Python
     dist_dir = os.path.join(temp_python_project, "dist")
     os.makedirs(dist_dir, exist_ok=True)
     wheel_path = os.path.join(dist_dir, "test-0.1.0-py3-none-any.whl")
     with open(wheel_path, "w") as f:
         f.write("fake wheel")
 
-    message_str = "#minor #added test feature"
     paths = [pyproject_path, package_path]
     repositories = {
         const.BuildTypes.PYTHON: "https://test.pypi.org/legacy/",
@@ -552,8 +550,37 @@ def test_build_and_publish_multiple_types(temp_python_project, temp_react_projec
     mock_result.stderr = ""
 
     with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
-        result = build_and_publish_package.build_and_publish(message_str, paths, repositories)
+        result = build_and_publish_package.build_and_publish(paths, repositories=repositories, publish=True)
 
         assert result is True
-        # Should have been called 4 times: build + publish for each project type
         assert mock_run.call_count == 4
+
+
+def test_build_and_publish_release_only(temp_python_project):
+    """Integration test: release=True builds and creates a GH release, no publish call."""
+    pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
+
+    dist_dir = os.path.join(temp_python_project, "dist")
+    os.makedirs(dist_dir, exist_ok=True)
+    with open(os.path.join(dist_dir, "test-0.1.0-py3-none-any.whl"), "w") as f:
+        f.write("fake wheel")
+
+    paths = [pyproject_path]
+    repositories = {const.BuildTypes.PYTHON: "https://test.pypi.org/legacy/"}
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+    mock_result.stdout = "v0.0.0\n"
+
+    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        result = build_and_publish_package.build_and_publish(
+            paths, repositories=repositories, release=True
+        )
+
+        assert result is True
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        # build called
+        assert any(c[0] == "uv" for c in calls)
+        # gh release create called
+        assert any(c[0] == "gh" for c in calls)

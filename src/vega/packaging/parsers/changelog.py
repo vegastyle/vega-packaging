@@ -95,3 +95,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         # Update the file
         with open(self.path, "w") as handle:
             handle.writelines(self.content)
+
+    def changes(self, version=None, since=None) -> str:
+        """Returns changelog content for a version range.
+
+        Args:
+            version: target version (e.g. "1.0.0"). If None, uses the latest version.
+            since: exclusive lower bound version (e.g. "0.1.0"). If None, only the single
+                   section identified by `version` is returned.
+        """
+        lines = self.content
+        start_idx = None
+        end_idx = len(lines)
+
+        target = str(version) if version else None
+        lower = str(since) if since else None
+
+        for i, line in enumerate(lines):
+            match = self.VERSION_REGEX.match(line)
+            if not match:
+                continue
+            v = match.group("version")
+
+            if start_idx is None:
+                if target is None or v == target:
+                    start_idx = i
+            else:
+                if lower is None or v == lower:
+                    end_idx = i
+                    break
+
+        if start_idx is None:
+            return ""
+        return "".join(lines[start_idx:end_idx])
