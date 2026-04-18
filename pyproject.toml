@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vega-packaging"
-version = "0.6.2"
+version = "0.7.0"
 description = "Command Line tool for updating data on files that relate to packaging"
 dependencies = [ "toml",]
 [[project.authors]]
@@ -27,12 +27,10 @@ Changelog = "https://github.com/vegastyle/vega-packaging/blob/main/CHANGELOG.md"
 update_semantic_version = "vega.packaging.bootstrappers.update_semantic_version:main"
 build_and_publish = "vega.packaging.bootstrappers.build_and_publish_package:main"
 
+[tool.pytest.ini_options]
+markers = [ "e2e: end-to-end tests requiring network access to dev registries",]
+
 [tool.setuptools.packages.find]
 where = [ "src",]
 include = [ "vega.*",]
 exclude = [ "venv", "tests", ".github",]
-
-[tool.pytest.ini_options]
-markers = [
-    "e2e: end-to-end tests requiring network access to dev registries",
-]

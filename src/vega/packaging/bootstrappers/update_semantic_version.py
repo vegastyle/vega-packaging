@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument("-pp", "--pyproject_path", help="path to the pyproject to update")
     parser.add_argument("-rp", "--react_package_path", help="path to the react package.json file to update")
     parser.add_argument("-dp", "--dockerfile_path", help="path to the dockerfile file to track")
-    parser.add_argument("-cp", "--cargo_path", help="path to the Cargo.toml file to update")
+    parser.add_argument("-ca", "--cargo_path", help="path to the Cargo.toml file to update")
     parser.add_argument("-gh", "--github_env", help="set the semantic revision env variable on git",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-v", "--verbose", help="print out debug statements",

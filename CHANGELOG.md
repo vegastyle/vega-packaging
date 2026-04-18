@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.7.0] - 2026/04/18 03:16:33
+
+### Added
+
+- support for updating the version of a docker-compose.yaml version
+- refactored logic for parsing files to also support building and publishing workflows per file type plugin
+- support for docker files
+- versions file for holding class object that handles versioning logic
+- tests to confirm build and publish behaviour works
+- cross-platform Rust release support with compile_only flag and per-language reusable workflows
+- RELEASE_PATH and CROSS_TARGETS to Cargo parser
+- --compile_only flag to build_and_publish CLI
+- file attachment support to Github.create()
+- build_and_publish_rust build_and_publish_python build_and_publish_react build_and_publish_docker reusable workflows
+- bump_build_and_publish.yml top-level orchestration workflow
+- context manager for working directory handling
+
+### Changed
+
+- decoupled consts and resuable functions to their own modules
+- semantic versioning tests to work with new refactored code
+- update_version_workflow.yml to remove build-and-publish job and expose build type outputs
+- README.md and example/README.md to document all new capabilities
+- parsers to set the current working directory to where the package files live
+- short name cli parameter flags to be consistent with the different languages
+- docstrings and variable names
+- readme with examples on how to add build, publish, and release steps to the parsers
+
+
 ## [0.6.2] - 2025/04/21 16:46:21
 
 ### Fixed
