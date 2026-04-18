@@ -168,15 +168,18 @@ Key methods to implement:
 #### Example
 ```python
 import re
+import subprocess
 
 from vega.packaging import commits
+from vega.packaging import const
+from vega.packaging import contextmanagers
 from vega.packaging import decorators
 from vega.packaging.parsers import abstract_parser
 
 
 class MyNewFileParser(abstract_parser.AbstractFileParser):
     # FILENAME_REGEX is the key used to resolve which parser goes with which file
-    # Regex is used to accommodate for dynamic names, multiple names and to ignore casing.  
+    # Regex is used to accommodate for dynamic names, multiple names and to ignore casing.
     FILENAME_REGEX = re.compile("somefilename.txt", re.I)
     # PRIORITY is to determine the parsing priority order of the file, with 1 being the highest
     PRIORITY = 3
@@ -185,8 +188,14 @@ class MyNewFileParser(abstract_parser.AbstractFileParser):
     # TEMPLATE is the contents of what a new file generated file should contain
     TEMPLATE = "Hello World!"
     # DEFAULT_VERSION is the version that should be returned when no version is found. The default value is 0.0.0
-    # There are 4 methods that need to be reimplemented from the abstract method. 
-    
+
+    # Build-related attributes (set these to enable build_and_publish support)
+    IS_BUILD_FILE = True  # Set True to enable build/publish/release support
+    BUILD_TYPE = const.BuildTypes.CUSTOM  # Define a new BuildType or use existing
+    RELEASE_PATH = None  # Set to directory name if build produces release artifacts (e.g., "bin")
+
+    # There are 4 methods that need to be reimplemented from the abstract method.
+
     # The version property is how you get the version associated with this file
     @property
     def version(self) -> str:
@@ -195,32 +204,32 @@ class MyNewFileParser(abstract_parser.AbstractFileParser):
             regex = re.search("My Version is (?P<version>[0-9]+.[0-9]+.[0-9]+)", self.content)
             self._version = regex.group("version") if regex else self.DEFAULT_VERSION
         return self._version
-    
+
     # The create method is for creating a new version of this file using the template
     def create(self):
         """Creates a new file with the contents of the template."""
         with open(self.path, "w+") as handle:
             handle.write(self.TEMPLATE)
 
-    # Reads the content of the file. 
-    # The content property should be used to access the data as it is cached in memory. 
+    # Reads the content of the file.
+    # The content property should be used to access the data as it is cached in memory.
     # The content property uses the read property to read the contents of the file.
     def read(self):
         """Creates a new file with the contents of the template."""
         with open(self.path, "r+") as handle:
             return handle.read(self.path)
-    
-    # The update method updates the content of the file based on the data from the commit message. 
+
+    # The update method updates the content of the file based on the data from the commit message.
     # The file should be overwritten at the end of this method.
     # The autocreate decorator is for raising an error if the file doesn't exist if AUTOCREATE is false and to create it
     # if AUTOCREATE is True
     @decorators.autocreate
     def update(self, commit_message: commits.CommitMessage):
-        """Updates the content of the file based on the commit message. 
-      
-        Args: 
+        """Updates the content of the file based on the commit message.
+
+        Args:
           commit_message: the message to use for updating the file
-        """  
+        """
         # Updates the semantic version of this file
         # If the commit message doesn't have a semantic version resolved and has a pending bump
         # then the update_version method will update the semantic version of the commit message based on the bump version value.
@@ -231,18 +240,73 @@ class MyNewFileParser(abstract_parser.AbstractFileParser):
         regex = re.compile("My Version is (?P<version>[0-9]+.[0-9]+.[0-9]+)")
         if regex.search(self.content):
             content = regex.sub(commit_message.semantic_version, self.content)
-        else: 
+        else:
             content = f"{self.content}\nMy Version is {commit_message.semantic_version}"
 
         # Update the file
         with open(self.path, "w+") as handle:
             handle.write(content)
-        
-        # Reset the values of the object so they get parsed again data is queried from it. 
+
+        # Reset the values of the object so they get parsed again data is queried from it.
         # Note: This isn't required if the content data is mutable, and really only required if the data is unmutable
         #       like in this example
 
         self.reset()
+
+    def build(self, commit_message=None):
+        """Builds the package.
+
+        This method is called by build_and_publish when --publish or --release is used.
+        Use WorkingDirectory context manager to ensure subprocess runs from the package directory.
+        """
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            # Example: run a custom build command
+            result = subprocess.run(
+                ["mybuildtool", "build"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Build failed: {result.stderr}")
+            # Store the build artifact path (relative to package directory)
+            self._build = "dist/package.zip"
+
+    def publish(self, registry=None):
+        """Publishes the package to a registry.
+
+        This method is called by build_and_publish after all builds complete successfully.
+        Use WorkingDirectory context manager to ensure subprocess runs from the package directory.
+        """
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            registry = registry or self._registry
+            if not self._build:
+                raise RuntimeError("Must build before publishing")
+            # Example: publish to a registry
+            cmd = ["mybuildtool", "publish", self._build]
+            if registry:
+                cmd.extend(["--registry", registry])
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"Publish failed: {result.stderr}")
+
+    def release(self):
+        """Stages release artifacts for GitHub/GitLab release.
+
+        This method is called by build_and_publish when --compile_only is used.
+        Use WorkingDirectory context manager to ensure subprocess runs from the package directory.
+        Artifacts should be placed in the directory specified by RELEASE_PATH.
+        """
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            # Example: compile release binaries and stage them
+            result = subprocess.run(
+                ["mybuildtool", "release"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Release build failed: {result.stderr}")
+            # Artifacts are staged under RELEASE_PATH directory (e.g., "bin/")
+            # and will be attached to the GitHub/GitLab release by build_and_publish
 ```
 
 ### Making the Plugin Discoverable 
