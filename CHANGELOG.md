@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.7.1] - 2026/04/18 07:51:34
+
+### Changed
+
+- versioning-workflow to version 1.4.1
+
+### Fixed
+
+- BUILD env var from being built with the enum object and to use the enum values instead.
+
+
 ## [0.7.0] - 2026/04/18 03:16:33
 
 ### Added
