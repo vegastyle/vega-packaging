@@ -53,4 +53,4 @@ class GitEnv(abstract_parser.AbstractFileParser):
 
         # Update the file
         with open(self.path, "w") as handle:
-            handle.writelines([f"{key}={value}" for key, value in self.content.items()])
+            handle.writelines([f"\n{key}={value}" for key, value in self.content.items()])

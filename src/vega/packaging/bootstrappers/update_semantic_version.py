@@ -108,7 +108,7 @@ def main():
             
             if build_types != ":":
                 with open(github_env_path, "a") as github_env_file:
-                    github_env_file.write(f"BUILD={build_types}:\n")
+                    github_env_file.write(f"\nBUILD={build_types}:\n")
                     logger.info(f"Wrote BUILD={build_types} to GITHUB_ENV")
 
 
