@@ -112,8 +112,14 @@ Supported files are parsed in order of priority, with 1 being the highest priori
         * #updated
         * #fixed
         * #security
+      * Trigger build related jobs
+        * #publish
+          * Build and publish the built code to a public or private registry
+        * #release
+          * Build and release the the built code and executables through a release provider. Currently only GitHub is supported.  
+      * Ignore this commmit from CI/CD workflows
         * #ignore
-          * The ignore tag tells the command to do nothing.<br>This hashtag is intended to be used when the commit should be ignored by the CI/CD workflow that is using it.
+
 * **--directory**
   * Optional Argument
   * Directory to search for files to update.
