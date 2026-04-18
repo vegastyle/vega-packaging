@@ -103,12 +103,12 @@ def main():
             build_types = ":"
             for path in io.yield_paths(args.directory, explicit_paths):
                 file_parser = factory.get_parser_from_path(path)
-                if file_parser and file_parser.IS_BUILD_FILE:
-                    build_types += f"{file_parser.BUILD_TYPE}:"
+                if file_parser and file_parser.exists and file_parser.IS_BUILD_FILE:
+                    build_types += f"{file_parser.BUILD_TYPE.value}:"
             
             if build_types != ":":
                 with open(github_env_path, "a") as github_env_file:
-                    github_env_file.write(f"\nBUILD={build_types}:\n")
+                    github_env_file.write(f"\nBUILD={build_types}\n")
                     logger.info(f"Wrote BUILD={build_types} to GITHUB_ENV")
 
 
