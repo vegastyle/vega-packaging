@@ -107,7 +107,7 @@ def test_build_and_publish_filters_non_build_files(temp_python_project):
 # ============================================================================
 
 def test_pyproject_build_success(temp_python_project):
-    """Test PyProject.build() calls subprocess correctly"""
+    """Test PyProject.build() calls subprocess correctly within package directory."""
     pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
     parser = factory.get_parser_from_path(pyproject_path)
 
@@ -125,16 +125,15 @@ def test_pyproject_build_success(temp_python_project):
     with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
         parser.build()
 
-        # Verify subprocess was called with correct arguments
+        # Verify subprocess was called without cwd (parser handles it internally)
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         assert call_args[0][0] == ["uv", "run", "python", "-m", "build"]
-        assert call_args[1]["cwd"] == temp_python_project
         assert call_args[1]["capture_output"] is True
         assert call_args[1]["text"] is True
 
-    # Verify _build was set to the wheel path
-    assert parser._build == wheel_path
+    # Verify _build was set to the wheel path (relative to package directory)
+    assert parser._build == os.path.join("dist", "test_package-0.1.0-py3-none-any.whl")
 
 
 def test_pyproject_build_failure(temp_python_project):
@@ -203,7 +202,7 @@ def test_pyproject_publish_failure(temp_python_project):
 # ============================================================================
 
 def test_react_package_build_success(temp_react_project):
-    """Test ReactPackage.build() calls subprocess correctly"""
+    """Test ReactPackage.build() calls subprocess correctly within package directory."""
     package_path = os.path.join(temp_react_project, "package.json")
     parser = factory.get_parser_from_path(package_path)
 
@@ -217,12 +216,11 @@ def test_react_package_build_success(temp_react_project):
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         assert call_args[0][0] == ["npm", "run", "build"]
-        assert call_args[1]["cwd"] == temp_react_project
         assert call_args[1]["capture_output"] is True
         assert call_args[1]["text"] is True
 
-    # Verify _build was set to the project directory
-    assert parser._build == temp_react_project
+    # Verify _build was set to current directory marker
+    assert parser._build == "."
 
 
 def test_react_package_build_failure(temp_react_project):
@@ -240,7 +238,7 @@ def test_react_package_build_failure(temp_react_project):
 
 
 def test_react_package_publish_success(temp_react_project):
-    """Test ReactPackage.publish() calls subprocess correctly"""
+    """Test ReactPackage.publish() calls subprocess correctly within package directory."""
     package_path = os.path.join(temp_react_project, "package.json")
     parser = factory.get_parser_from_path(package_path)
     parser._registry = "https://npm.pkg.github.com"
@@ -255,7 +253,6 @@ def test_react_package_publish_success(temp_react_project):
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         assert call_args[0][0] == ["npm", "publish", "--registry", "https://npm.pkg.github.com"]
-        assert call_args[1]["cwd"] == temp_react_project
 
 
 def test_react_package_publish_failure(temp_react_project):

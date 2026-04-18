@@ -4,6 +4,7 @@ import re
 import subprocess
 
 from vega.packaging import const
+from vega.packaging import contextmanagers
 from vega.packaging.parsers import abstract_parser
 
 
@@ -78,22 +79,24 @@ class DockerFile(abstract_parser.AbstractFileParser):
         """Builds the Docker image."""
         if not self._build:
             raise RuntimeError("Registry must be set before building")
-        result = subprocess.run(
-            ["docker", "build", "-t", self._build, os.path.dirname(self.path)],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Docker build failed: {result.stderr}")
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            result = subprocess.run(
+                ["docker", "build", "-t", self._build, "."],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Docker build failed: {result.stderr}")
 
     def publish(self, registry=None):
         """Pushes the Docker image to registry."""
-        if not self._build:
-            raise RuntimeError("Must build before publishing")
-        result = subprocess.run(
-            ["docker", "push", self._build],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Docker push failed: {result.stderr}")
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            if not self._build:
+                raise RuntimeError("Must build before publishing")
+            result = subprocess.run(
+                ["docker", "push", self._build],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Docker push failed: {result.stderr}")

@@ -6,6 +6,7 @@ import subprocess
 import toml
 
 from vega.packaging import commits, decorators, const, versions
+from vega.packaging import contextmanagers
 from vega.packaging.parsers import abstract_parser
 
 
@@ -73,30 +74,31 @@ class PyProject(abstract_parser.AbstractFileParser):
 
     def build(self, commit_message=None):
         """Builds the Python package."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "build"],
-            cwd=os.path.dirname(self.path),
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Build failed: {result.stderr}")
-        # Find the built wheel in dist/
-        dist_dir = os.path.join(os.path.dirname(self.path), "dist")
-        for filename in os.listdir(dist_dir):
-            if filename.endswith(".whl"):
-                self._build = os.path.join(dist_dir, filename)
-                break
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            result = subprocess.run(
+                ["uv", "run", "python", "-m", "build"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Build failed: {result.stderr}")
+            # Find the built wheel in dist/
+            dist_dir = "dist"
+            for filename in os.listdir(dist_dir):
+                if filename.endswith(".whl"):
+                    self._build = os.path.join(dist_dir, filename)
+                    break
 
     def publish(self, registry=None):
         """Publishes the Python package using twine."""
-        registry = registry or self._registry
-        if not self._build:
-            raise RuntimeError("Must build before publishing")
-        cmd = ["uv", "run", "python", "-m", "twine", "upload"]
-        if registry:
-            cmd.extend(["--repository-url", registry])
-        cmd.append(self._build)
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"Publish failed: {result.stderr}")
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            registry = registry or self._registry
+            if not self._build:
+                raise RuntimeError("Must build before publishing")
+            cmd = ["uv", "run", "python", "-m", "twine", "upload"]
+            if registry:
+                cmd.extend(["--repository-url", registry])
+            cmd.append(self._build)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"Publish failed: {result.stderr}")

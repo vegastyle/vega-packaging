@@ -22,11 +22,12 @@ def parse_args():
     parser.add_argument("-s", "--subject", help="subject of the message to parse for the changelog", required=True)
     parser.add_argument("-m", "--description", help="description of the message to parse for the changelog")
     parser.add_argument("-d", "--directory", help="directory to look for files to update", default=os.getcwd())
-    parser.add_argument("-c", "--changelog_path", help="path to the changelog markdown file to update")
-    parser.add_argument("-p", "--pyproject_path", help="path to the pyproject to update")
-    parser.add_argument("-r", "--react_package_path", help="path to the react package.json file to update")
-    parser.add_argument("--cargo_path", help="path to the Cargo.toml file to update")
-    parser.add_argument("-g", "--github_env", help="set the semantic revision env variable on git",
+    parser.add_argument("-cp", "--changelog_path", help="path to the changelog markdown file to update")
+    parser.add_argument("-pp", "--pyproject_path", help="path to the pyproject to update")
+    parser.add_argument("-rp", "--react_package_path", help="path to the react package.json file to update")
+    parser.add_argument("-dp", "--dockerfile_path", help="path to the dockerfile file to track")
+    parser.add_argument("-cp", "--cargo_path", help="path to the Cargo.toml file to update")
+    parser.add_argument("-gh", "--github_env", help="set the semantic revision env variable on git",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-v", "--verbose", help="print out debug statements",
                         action=argparse.BooleanOptionalAction)
@@ -35,31 +36,29 @@ def parse_args():
     return parser.parse_args()
 
 
-
 def update_semantic_version(message_str: str, paths: list[str], match=True):
-    """Updates the semantic version of the provided file paths ,if they are supported, based on the contents of the message string.
+    """Updates the semantic version of the provided file paths, if they are supported, based on the contents of the message string.
 
     Args:
         message_str: string to be parsed to determine how to update the semantic version
         paths: list of files whose files should be updated.
     """
- 
     # Parse commit message
     commit_message = commits.CommitMessage(message_str)
-    if not commit_message.is_valid: 
+    if not commit_message.is_valid:
         return False
-    
+
     # Get file parsers
     packaging_files = []
 
     for path in paths:
-        packaging_file = factory.get_parser_from_path(path)
-        if not packaging_file or (not packaging_file.exists and not packaging_file.AUTOCREATE):
+        file_parser = factory.get_parser_from_path(path)
+        if not file_parser or (not file_parser.exists and not file_parser.AUTOCREATE):
             continue
-        packaging_files.append(packaging_file)
+        packaging_files.append(file_parser)
 
     # Update files based on parsing priority
-    packaging_files.sort(key=lambda value: value.PRIORITY)
+    packaging_files.sort(key=lambda file_parser: file_parser.PRIORITY)
     semantic_version = None
     if match:
         semantic_version = packaging_files[0].version.start_value()
@@ -86,7 +85,6 @@ def main():
     ignored = True
     for message in [args.subject, args.description]:
         logger.debug(f"Parsing commit message: {message}")
-        # Update semantic version
         filepath_generator = io.yield_paths(args.directory, explicit_paths)
         message_parsed = update_semantic_version(message, filepath_generator)
         if message_parsed:
@@ -96,19 +94,22 @@ def main():
     if ignored:
         message = "\n\n".join([args.subject, args.description])
         logger.warning(f"Ignoring Commit:\n\t{message}")
+    
     elif args.github_env:
         github_env_path = os.environ.get("GITHUB_ENV", "")
         if github_env_path:
-            seen_build_types = set()
+            explicit_paths.append("dockerfile")
+            
+            build_types = ":"
             for path in io.yield_paths(args.directory, explicit_paths):
-                pf = factory.get_parser_from_path(path)
-                if pf and pf.IS_BUILD_FILE and pf.BUILD_TYPE is not None:
-                    seen_build_types.add(pf.BUILD_TYPE)
-            with open(github_env_path, "a") as gh_env:
-                for build_type in seen_build_types:
-                    env_key = f"BUILD_{build_type.name}"
-                    gh_env.write(f"{env_key}=True\n")
-                    logger.info(f"Wrote {env_key}=True to GITHUB_ENV")
+                file_parser = factory.get_parser_from_path(path)
+                if file_parser and file_parser.IS_BUILD_FILE:
+                    build_types += f"{file_parser.BUILD_TYPE}:"
+            
+            if build_types != ":":
+                with open(github_env_path, "a") as github_env_file:
+                    github_env_file.write(f"BUILD={build_types}:\n")
+                    logger.info(f"Wrote BUILD={build_types} to GITHUB_ENV")
 
 
 if __name__ == "__main__":

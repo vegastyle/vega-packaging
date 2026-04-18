@@ -6,6 +6,7 @@ import subprocess
 import json
 
 from vega.packaging import commits, decorators, const, versions
+from vega.packaging import contextmanagers
 from vega.packaging.parsers import abstract_parser
 
 
@@ -83,27 +84,27 @@ class ReactPackage(abstract_parser.AbstractFileParser):
     
     def build(self, commit_message=None):
         """Builds the NPM package."""
-        result = subprocess.run(
-            ["npm", "run", "build"],
-            cwd=os.path.dirname(self.path),
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Build failed: {result.stderr}")
-        self._build = os.path.dirname(self.path)
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            result = subprocess.run(
+                ["npm", "run", "build"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Build failed: {result.stderr}")
+            self._build = "."
 
     def publish(self, registry=None):
         """Publishes the NPM package."""
-        registry = registry or self._registry
-        cmd = ["npm", "publish"]
-        if registry:
-            cmd.extend(["--registry", registry])
-        result = subprocess.run(
-            cmd,
-            cwd=os.path.dirname(self.path),
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Publish failed: {result.stderr}")
+        with contextmanagers.WorkingDirectory(self.path, is_file=True):
+            registry = registry or self._registry
+            cmd = ["npm", "publish"]
+            if registry:
+                cmd.extend(["--registry", registry])
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Publish failed: {result.stderr}")
