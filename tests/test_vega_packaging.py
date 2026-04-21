@@ -109,6 +109,19 @@ def temp_react_project():
         shutil.rmtree(path)
 
 
+@pytest.fixture
+def temp_changelog_only_project():
+    """Temporary project directory containing only an autocreated changelog."""
+    path = os.path.join(tempfile.tempdir, "test_changelog_only_packaging")
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.mkdir(path)
+
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
+
+
 # ============================================================================
 # Tests for const.py
 # ============================================================================
@@ -406,6 +419,21 @@ def test_update_semantic_version_react(temp_react_project):
 
     with open(pyproject_path, "r") as handle:
         assert json.load(handle)["version"] == "0.1.0"
+
+
+def test_update_semantic_version_changelog_only(temp_changelog_only_project):
+    """Integration test for autocreating and updating a standalone changelog."""
+    message_str = "#patch #fixed fixed changelog-only workflow"
+    changelog_path = os.path.join(temp_changelog_only_project, "CHANGELOG.md")
+
+    update_semantic_version.update_semantic_version(message_str, [changelog_path])
+
+    message = commits.CommitMessage(message_str)
+    changelog_cls = factory.get_parser_cls_by_filename("changelog.md")
+
+    content = f"{changelog_cls.TEMPLATE}\n{message.markdown('0.0.1')}"
+    with open(changelog_path, "r") as handle:
+        assert handle.read() == content
 
 
 # ============================================================================

@@ -49,13 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     @property
     def insert_version_index(self) -> int:
         """The index to insert the new version markdown info"""
-        if not self._insert_version_index:
+        if self._insert_version_index is None:
             self.__get_insert_version_index()
         return self._insert_version_index
 
     def __get_insert_version_index(self):
         """Gets the version and index where to insert the new version markdown changelog."""
-        for index, line in enumerate(self.content):
+        for index, line in enumerate(self.content or []):
             regex = self.VERSION_REGEX.match(line)
             # At the first match of a semantic version stop and store it for later
             if regex:
@@ -104,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             since: exclusive lower bound version (e.g. "0.1.0"). If None, only the single
                    section identified by `version` is returned.
         """
-        lines = self.content
+        lines = self.content or []
         start_idx = None
         end_idx = len(lines)
 
