@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 class AbstractFileParser:
     """Abstract file parser class for creating new file parsers."""
+    NAME=None
     FILENAME_REGEX = None
     TEMPLATE = None
     AUTOCREATE = False

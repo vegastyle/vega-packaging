@@ -9,6 +9,8 @@ import tempfile
 import datetime
 import shutil
 import json
+import argparse
+from unittest import mock
 
 import toml
 import pytest
@@ -110,6 +112,22 @@ def temp_react_project():
 
 
 @pytest.fixture
+def temp_docker_project():
+    """Temporary docker project directory for testing."""
+    path = os.path.join(tempfile.tempdir, "test_docker_semver_packaging")
+    dockerfile_path = os.path.join(path, "Dockerfile")
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.mkdir(path)
+    with open(dockerfile_path, "w+") as handle:
+        handle.write("FROM python:3.12-slim\n")
+
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
+
+
+@pytest.fixture
 def temp_changelog_only_project():
     """Temporary project directory containing only an autocreated changelog."""
     path = os.path.join(tempfile.tempdir, "test_changelog_only_packaging")
@@ -149,6 +167,21 @@ def test_build_types_enum():
     assert const.BuildTypes.PYTHON.value == "python"
     assert const.BuildTypes.NPM.value == "npm"
     assert const.BuildTypes.DOCKER.value == "docker"
+
+
+def test_parser_priorities():
+    """Version resolution should prefer code files first, then Docker, then changelog."""
+    pyproject_cls = factory.get_parser_cls_by_filename("pyproject.toml")
+    react_cls = factory.get_parser_cls_by_filename("package.json")
+    cargo_cls = factory.get_parser_cls_by_filename("Cargo.toml")
+    docker_cls = factory.get_parser_cls_by_filename("Dockerfile")
+    changelog_cls = factory.get_parser_cls_by_filename("CHANGELOG.md")
+
+    assert pyproject_cls.PRIORITY == 1
+    assert react_cls.PRIORITY == 1
+    assert cargo_cls.PRIORITY == 1
+    assert docker_cls.PRIORITY == 2
+    assert changelog_cls.PRIORITY == 3
 
 
 # ============================================================================
@@ -308,16 +341,15 @@ def test_dockerfile_parser(dockerfile_path):
     dockerfile_parser.create()
     assert dockerfile_parser.exists
 
-    # DockerFile doesn't have version tracking
-    assert dockerfile_parser.version is None
+    # DockerFile resolves its version dynamically from image tags and falls back to 0.0.0
+    assert dockerfile_parser.version == "0.0.0"
     assert dockerfile_parser.HAS_VERSION is False
     assert dockerfile_parser.IS_BUILD_FILE is True
     assert dockerfile_parser.BUILD_TYPE == const.BuildTypes.DOCKER
 
-    # Test that update raises NotImplementedError
+    # update() is a no-op for Docker metadata
     message = commits.CommitMessage("#major #added added dockerfile support")
-    with pytest.raises(NotImplementedError):
-        dockerfile_parser.update(message, None)
+    assert dockerfile_parser.update(message, None) is None
 
 
 def test_github_env_parser(githubenv_path):
@@ -332,11 +364,15 @@ def test_github_env_parser(githubenv_path):
     if not githubenv_parser.exists:
         githubenv_parser.create()
     assert githubenv_parser.exists
+    githubenv_parser.builds = ["python", "docker"]
     githubenv_parser.update(message, None)
 
     with open(githubenv_parser.path, "r") as handle:
         content = handle.read()
         assert re.search("SEMANTIC_VERSION=1.0.0", content) is not None
+        assert re.search("BUILD=python:docker", content) is not None
+        assert re.search("PUBLISH=False", content) is not None
+        assert re.search("RELEASE=False", content) is not None
 
 
 def test_react_package_parser(react_package_path):
@@ -436,6 +472,108 @@ def test_update_semantic_version_changelog_only(temp_changelog_only_project):
         assert handle.read() == content
 
 
+def test_update_semantic_version_docker_only_uses_registry_version(temp_docker_project):
+    """Docker-only version matching should use the Docker image version instead of changelog fallback."""
+    message_str = "#patch #fixed fixed docker-only workflow"
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    changelog_path = os.path.join(temp_docker_project, "CHANGELOG.md")
+
+    parsers = update_semantic_version.get_parsers_dict([dockerfile_path, changelog_path])
+    docker_cls = parsers["builds"][const.BuildTypes.DOCKER][0].__class__
+
+    with mock.patch.object(docker_cls, "_DockerFile__get_image_tags", return_value=["1.2.3", "latest"]), \
+         mock.patch.object(docker_cls, "_DockerFile__get_git_repository", return_value=None):
+        for docker_parser in parsers["builds"][const.BuildTypes.DOCKER]:
+            docker_parser.registry = "ghcr.io/testuser"
+
+        update_semantic_version.update_semantic_version(message_str, parsers=parsers)
+
+    with open(changelog_path, "r") as handle:
+        content = handle.read()
+    assert "## [1.2.4]" in content
+    assert "- fixed docker-only workflow" in content
+
+
+def test_update_semantic_version_main_applies_docker_registry(temp_docker_project, monkeypatch):
+    """main() should set the explicit Docker registry before resolving Docker image versions."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    changelog_path = os.path.join(temp_docker_project, "CHANGELOG.md")
+
+    args = argparse.Namespace(
+        subject="#minor #added added docker registry support",
+        description=None,
+        directory=temp_docker_project,
+        changelog_path=changelog_path,
+        pyproject_path=None,
+        react_package_path=None,
+        dockerfile_path=dockerfile_path,
+        docker_registry="ghcr.io/testuser",
+        cargo_path=None,
+        github_env=False,
+        verbose=False,
+        log_to_disk=False,
+    )
+
+    parsers = update_semantic_version.get_parsers_dict([dockerfile_path, changelog_path])
+    docker_cls = parsers["builds"][const.BuildTypes.DOCKER][0].__class__
+
+    def fake_get_image_tags(self):
+        assert self.registry == "ghcr.io/testuser"
+        return ["2.3.4"]
+
+    monkeypatch.setattr(update_semantic_version, "parse_args", lambda: args)
+    monkeypatch.setattr(update_semantic_version, "get_parsers_dict", lambda paths: parsers)
+    monkeypatch.setattr(update_semantic_version.log, "setup", lambda *args, **kwargs: None)
+
+    with mock.patch.object(docker_cls, "_DockerFile__get_image_tags", fake_get_image_tags), \
+         mock.patch.object(docker_cls, "_DockerFile__get_git_repository", return_value=None):
+        update_semantic_version.main()
+
+    with open(changelog_path, "r") as handle:
+        content = handle.read()
+    assert "## [2.4.0]" in content
+    assert "- added docker registry support" in content
+
+
+def test_update_semantic_version_main_sets_github_env_builds(temp_python_project, temp_docker_project, githubenv_path, monkeypatch):
+    """main() should populate BUILD/PUBLISH/RELEASE in GITHUB_ENV from discovered build files."""
+    pyproject_path = os.path.join(temp_python_project, "pyproject.toml")
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    with open(githubenv_path, "w") as handle:
+        handle.write("")
+
+    args = argparse.Namespace(
+        subject="#minor #publish #release added build env support",
+        description=None,
+        directory=temp_python_project,
+        changelog_path=None,
+        pyproject_path=pyproject_path,
+        react_package_path=None,
+        dockerfile_path=dockerfile_path,
+        docker_registry="ghcr.io/testuser",
+        cargo_path=None,
+        github_env=True,
+        verbose=False,
+        log_to_disk=False,
+    )
+
+    monkeypatch.setattr(update_semantic_version, "parse_args", lambda: args)
+    monkeypatch.setattr(update_semantic_version.log, "setup", lambda *args, **kwargs: None)
+    monkeypatch.setenv("GITHUB_ENV", githubenv_path)
+
+    with mock.patch("vega.packaging.io.yield_paths", return_value=[pyproject_path, dockerfile_path, githubenv_path]), \
+         mock.patch("vega.packaging.parsers.docker.DockerFile._DockerFile__get_image_tags", return_value=[]), \
+         mock.patch("vega.packaging.parsers.docker.DockerFile._DockerFile__get_git_repository", return_value=None):
+        update_semantic_version.main()
+
+    with open(githubenv_path, "r") as handle:
+        content = handle.read()
+    assert "SEMANTIC_VERSION=0.1.0" in content
+    assert "BUILD=python:docker" in content
+    assert "PUBLISH=True" in content
+    assert "RELEASE=True" in content
+
+
 # ============================================================================
 # Tests for Cargo parser
 # ============================================================================
@@ -488,7 +626,6 @@ def test_cargo_build_success(temp_cargo_project):
         parser.build()
         call_args = mock_run.call_args
         assert call_args[0][0] == ["cargo", "package"]
-        assert call_args[1]["cwd"] == temp_cargo_project
 
     assert parser._build.endswith(".crate")
 

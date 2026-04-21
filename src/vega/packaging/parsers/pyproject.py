@@ -76,7 +76,7 @@ class PyProject(abstract_parser.AbstractFileParser):
         """Builds the Python package."""
         with contextmanagers.WorkingDirectory(self.path, is_file=True):
             result = subprocess.run(
-                ["uv", "run", "python", "-m", "build"],
+                ["uv", "run", "--with", "build", "python", "-m", "build"],
                 capture_output=True,
                 text=True
             )

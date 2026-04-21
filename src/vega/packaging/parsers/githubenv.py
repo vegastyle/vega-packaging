@@ -10,7 +10,21 @@ class GitEnv(abstract_parser.AbstractFileParser):
     NAME = "GitEnv"
     FILENAME_REGEX = re.compile("set_env_[a-z0-9-]+", re.I)
     TEMPLATE = ""
-    PRIORITY = 4
+    PRIORITY = 5
+
+    def __init__(self, path, version = None):
+        super().__init__(path, version)
+        self.__builds = []
+
+    @property    
+    def builds(self):
+        return self.__builds
+    
+    @builds.setter
+    def builds(self, value):
+        if not isinstance(value, list):
+            raise ValueError(f"Expected List, got {type(value)} instead")
+        self.__builds = value
 
     @property
     def version(self) -> str:
@@ -48,6 +62,7 @@ class GitEnv(abstract_parser.AbstractFileParser):
 
         # Add semantic version environment variable to the GitHub env
         self.content["SEMANTIC_VERSION"] = str(self.version)
+        self.content["BUILD"] = ":".join(self.builds)
         self.content["PUBLISH"] = str(commit_message.publish)
         self.content["RELEASE"] = str(commit_message.release)
 

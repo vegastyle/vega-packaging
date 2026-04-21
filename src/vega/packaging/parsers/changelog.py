@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 """
-    PRIORITY = 2
+    PRIORITY = 3
     VERSION_REGEX = re.compile("## \\[(?P<version>[0-9]+.[0-9]+.[0-9]+)\\]")
 
     def __init__(self, path: str):

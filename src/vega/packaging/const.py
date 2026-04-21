@@ -40,3 +40,4 @@ class Builds(enum.Enum):
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
+

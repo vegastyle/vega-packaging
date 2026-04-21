@@ -7,6 +7,7 @@ actually running build/publish commands.
 import os
 import tempfile
 import shutil
+import json
 from unittest import mock
 
 import pytest
@@ -128,7 +129,7 @@ def test_pyproject_build_success(temp_python_project):
         # Verify subprocess was called without cwd (parser handles it internally)
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == ["uv", "run", "python", "-m", "build"]
+        assert call_args[0][0] == ["uv", "run", "--with", "build", "python", "-m", "build"]
         assert call_args[1]["capture_output"] is True
         assert call_args[1]["text"] is True
 
@@ -278,8 +279,8 @@ def test_dockerfile_build_success(temp_docker_project):
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
 
-    # Set up registry and version to generate _build path
     parser.registry = "ghcr.io/testuser"
+    parser.package = "test_docker_packaging"
     parser.registry_version = "1.0.0"
 
     mock_result = mock.MagicMock()
@@ -291,11 +292,10 @@ def test_dockerfile_build_success(temp_docker_project):
 
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0][0] == "docker"
-        assert call_args[0][0][1] == "build"
-        assert call_args[0][0][2] == "-t"
-        # Build tag should include registry/package:version
-        assert "ghcr.io/testuser" in call_args[0][0][3]
+        assert call_args[0][0] == [
+            "docker", "build", "-t", "ghcr.io/testuser/test_docker_packaging:1.0.0", "."
+        ]
+    assert parser._build == "ghcr.io/testuser/test_docker_packaging:1.0.0"
 
 
 def test_dockerfile_build_without_registry(temp_docker_project):
@@ -328,7 +328,9 @@ def test_dockerfile_publish_success(temp_docker_project):
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
     parser.registry = "ghcr.io/testuser"
+    parser.package = "test_docker_packaging"
     parser.registry_version = "1.0.0"
+    parser._build = parser.tag
 
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
@@ -339,14 +341,16 @@ def test_dockerfile_publish_success(temp_docker_project):
 
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0][0] == "docker"
-        assert call_args[0][0][1] == "push"
+        assert call_args[0][0] == ["docker", "push", "ghcr.io/testuser/test_docker_packaging:1.0.0"]
 
 
 def test_dockerfile_publish_without_build(temp_docker_project):
-    """Test DockerFile.publish() raises error without _build set"""
+    """Test DockerFile.publish() raises error if build() wasn't called first."""
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
+    parser.registry = "ghcr.io/testuser"
+    parser.package = "test_docker_packaging"
+    parser.registry_version = "1.0.0"
 
     with pytest.raises(RuntimeError, match="Must build before publishing"):
         parser.publish()
@@ -357,7 +361,9 @@ def test_dockerfile_publish_failure(temp_docker_project):
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
     parser.registry = "ghcr.io/testuser"
+    parser.package = "test_docker_packaging"
     parser.registry_version = "1.0.0"
+    parser._build = parser.tag
 
     mock_result = mock.MagicMock()
     mock_result.returncode = 1
@@ -407,23 +413,79 @@ def test_dockerfile_registry_version_property(temp_docker_project):
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
 
-    # registry_version falls back to version (which is None for Dockerfile)
-    assert parser.registry_version is None
+    # registry_version falls back to the resolved Docker version
+    assert parser.registry_version == "0.0.0"
     parser.registry_version = "2.0.0"
     assert parser.registry_version == "2.0.0"
 
 
-def test_dockerfile_build_path_generation(temp_docker_project):
-    """Test DockerFile generates correct build path from registry and version"""
+def test_dockerfile_tag_generation(temp_docker_project):
+    """Test DockerFile generates the correct image tag from registry/package/version"""
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     parser = factory.get_parser_from_path(dockerfile_path)
 
     parser.registry = "ghcr.io/myorg"
+    parser.package = "test_docker_packaging"
     parser.registry_version = "1.2.3"
 
-    # _build should be set to registry/package:version
-    expected_build = f"ghcr.io/myorg/{parser.package}:1.2.3"
-    assert parser._build == expected_build
+    assert parser.tag == "ghcr.io/myorg/test_docker_packaging:1.2.3"
+
+
+def test_dockerfile_registry_inferred_from_single_repository(temp_docker_project):
+    """Test DockerFile infers a single configured registry."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    parser = factory.get_parser_from_path(dockerfile_path)
+
+    with mock.patch.object(type(parser), "_DockerFile__get_docker_repositories", return_value=["ghcr.io/myorg"]):
+        assert parser.registry == "ghcr.io/myorg"
+
+
+def test_dockerfile_registry_raises_for_multiple_repositories(temp_docker_project):
+    """Test DockerFile errors when more than one registry is available."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    parser = factory.get_parser_from_path(dockerfile_path)
+
+    with mock.patch.object(type(parser), "_DockerFile__get_docker_repositories", return_value=["ghcr.io/one", "ghcr.io/two"]):
+        with pytest.raises(ValueError, match="Too many repositories"):
+            _ = parser.registry
+
+
+def test_dockerfile_package_prefers_git_repository(temp_docker_project):
+    """Test DockerFile package defaults to the Git repository name when available."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    parser = factory.get_parser_from_path(dockerfile_path)
+
+    with mock.patch.object(type(parser), "_DockerFile__get_git_repository", return_value="repo-name"):
+        assert parser.package == "repo-name"
+
+
+def test_dockerfile_version_uses_latest_semver_tag(temp_docker_project):
+    """Test DockerFile.version chooses the highest semantic version from available image tags."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    parser = factory.get_parser_from_path(dockerfile_path)
+
+    with mock.patch.object(type(parser), "_DockerFile__get_image_tags", return_value=["latest", "1.2.3", "1.10.0", "sha-abc", "0.9.0"]):
+        assert parser.version == "1.10.0"
+
+
+def test_dockerfile_reads_registries_from_docker_config(temp_docker_project, tmp_path, monkeypatch):
+    """Test DockerFile reads configured registries from ~/.docker/config.json."""
+    dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
+    parser = factory.get_parser_from_path(dockerfile_path)
+
+    home_dir = tmp_path / "home"
+    docker_dir = home_dir / ".docker"
+    docker_dir.mkdir(parents=True)
+    (docker_dir / "config.json").write_text(json.dumps({
+        "auths": {
+            "ghcr.io": {},
+            "registry.example.com": {},
+        }
+    }))
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    registries = parser._DockerFile__get_docker_repositories()
+    assert registries == ["ghcr.io", "registry.example.com"]
 
 
 def test_parser_package_property(temp_python_project, temp_react_project, temp_docker_project):
@@ -441,7 +503,8 @@ def test_parser_package_property(temp_python_project, temp_react_project, temp_d
     # DockerFile gets name from directory name
     dockerfile_path = os.path.join(temp_docker_project, "Dockerfile")
     docker_parser = factory.get_parser_from_path(dockerfile_path)
-    assert docker_parser.package == "test_docker_packaging"
+    with mock.patch.object(type(docker_parser), "_DockerFile__get_git_repository", return_value=None):
+        assert docker_parser.package == "test_docker_packaging"
 
 
 # ============================================================================
@@ -518,7 +581,9 @@ def test_build_and_publish_docker_integration(temp_docker_project):
     mock_result.returncode = 0
     mock_result.stderr = ""
 
-    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+    with mock.patch.object(factory.get_parser_from_path(dockerfile_path).__class__, "_DockerFile__get_image_semantic_versions", return_value=["1.0.0"]), \
+         mock.patch.object(factory.get_parser_from_path(dockerfile_path).__class__, "_DockerFile__get_git_repository", return_value="test_docker_packaging"), \
+         mock.patch("subprocess.run", return_value=mock_result) as mock_run:
         result = build_and_publish_package.build_and_publish(paths, repositories=repositories, publish=True)
 
         assert result is True
