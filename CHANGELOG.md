@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.7.5] - 2026/04/21 23:36:50
+
+### Fixed
+
+- bug where empty subjects or descriptions may cause the system to error out
+- added extra flags for the build command so that it functions as expected during a build run.
+
+
 ## [0.7.4] - 2026/04/21 20:49:12
 
 ### Added
