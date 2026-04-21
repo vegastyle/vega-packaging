@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.7.4] - 2026/04/21 20:49:12
+
+### Added
+
+- new tests to account for updated logic
+- NAME as a default class value
+
+### Changed
+
+- docker.py to infer version from semantic versions from tags on the current logged in registry.
+- uv run to sync the build library to ensure builds succeed
+- added support for setting a specific registry for docker parser to use for resolving the semantic version
+- githubenv.py to support setting the BUILD env var
+- pyproject.py to make sure the build lib is used during the build step
+- priority of docker files so they are before a changelog but after code package files
+
+
 ## [0.7.3] - 2026/04/21 05:40:47
 
 ### Added
