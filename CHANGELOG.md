@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.7.3] - 2026/04/21 05:40:47
+
+### Added
+
+- tests to account for a missing changelog as it should be autocreated if missing
+
+### Fixed
+
+- none error when there is no changelog available to iterate lines on.
+- version mismatch on uv.lock
+
+
 ## [0.7.2] - 2026/04/18 08:04:25
 
 ### Added
