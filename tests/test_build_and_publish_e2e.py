@@ -11,9 +11,11 @@ Skip E2E tests:
     uv run pytest tests/ -v -m "not e2e"
 """
 import os
+import socket
 import tempfile
 import shutil
 import uuid
+from urllib.parse import urlparse
 
 import pytest
 import requests
@@ -69,9 +71,48 @@ def generate_test_package_name() -> str:
     return f"vega-test-{uuid.uuid4().hex[:8]}"
 
 
+def _host_from_target(target: str) -> str:
+    """Extract a hostname from either a URL or a raw host string."""
+    parsed = urlparse(target)
+    return parsed.hostname or target
+
+
+def _require_reachable_targets(*targets: str) -> None:
+    """Skip E2E tests when required network targets are unavailable."""
+    for target in targets:
+        parsed = urlparse(target)
+        if parsed.scheme and parsed.netloc:
+            try:
+                response = requests.get(target, timeout=5)
+            except requests.RequestException:
+                pytest.skip(f"E2E target is not reachable from this environment: {target}")
+            if response.status_code >= 500:
+                pytest.skip(f"E2E target is unhealthy from this environment: {target}")
+            continue
+
+        host = _host_from_target(target)
+        try:
+            socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            pytest.skip(f"E2E registry host is not resolvable from this environment: {host}")
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
+
+@pytest.fixture(scope="module", autouse=True)
+def require_e2e_environment():
+    """Ensure E2E tests only run when credentials and registry hosts are available."""
+    if not os.getenv("TWINE_USERNAME") or not os.getenv("TWINE_PASSWORD"):
+        pytest.skip("TWINE_USERNAME and TWINE_PASSWORD must be set for E2E publish tests")
+
+    _require_reachable_targets(
+        PYPI_DEV_REGISTRY,
+        DOCKER_DEV_REGISTRY,
+        PYPI_CLEANUP_API,
+        DOCKER_CLEANUP_API,
+    )
 
 @pytest.fixture
 def e2e_python_project():

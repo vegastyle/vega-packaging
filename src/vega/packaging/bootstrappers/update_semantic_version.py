@@ -114,7 +114,7 @@ def main():
                 break
 
     ignored = True
-    for message in [args.subject, args.description]:
+    for message in filter(None, [args.subject, args.description]):
         logger.debug(f"Parsing commit message: {message}")
         message_parsed = update_semantic_version(message, parsers=parsers_dict)
         if message_parsed:

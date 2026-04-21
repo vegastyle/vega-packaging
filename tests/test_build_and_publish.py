@@ -129,7 +129,10 @@ def test_pyproject_build_success(temp_python_project):
         # Verify subprocess was called without cwd (parser handles it internally)
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == ["uv", "run", "--with", "build", "python", "-m", "build"]
+        assert call_args[0][0] == [
+            "uv", "run", "--with", "build", "--with", "setuptools>=61.0",
+            "python", "-m", "build", "--no-isolation"
+        ]
         assert call_args[1]["capture_output"] is True
         assert call_args[1]["text"] is True
 
@@ -168,7 +171,7 @@ def test_pyproject_publish_success(temp_python_project):
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         assert call_args[0][0] == [
-            "uv", "run", "python", "-m", "twine", "upload",
+            "uv", "run", "--with", "twine", "python", "-m", "twine", "upload",
             "--repository-url", "https://test.pypi.org/legacy/",
             "/path/to/package.whl"
         ]
@@ -281,13 +284,13 @@ def test_dockerfile_build_success(temp_docker_project):
 
     parser.registry = "ghcr.io/testuser"
     parser.package = "test_docker_packaging"
-    parser.registry_version = "1.0.0"
 
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
     mock_result.stderr = ""
 
-    with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+    with mock.patch.object(type(parser), "_DockerFile__get_image_tags", return_value=["1.0.0"]), \
+         mock.patch("subprocess.run", return_value=mock_result) as mock_run:
         parser.build()
 
         mock_run.assert_called_once()
@@ -329,8 +332,8 @@ def test_dockerfile_publish_success(temp_docker_project):
     parser = factory.get_parser_from_path(dockerfile_path)
     parser.registry = "ghcr.io/testuser"
     parser.package = "test_docker_packaging"
-    parser.registry_version = "1.0.0"
-    parser._build = parser.tag
+    with mock.patch.object(type(parser), "_DockerFile__get_image_tags", return_value=["1.0.0"]):
+        parser._build = parser.tag
 
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
@@ -426,9 +429,9 @@ def test_dockerfile_tag_generation(temp_docker_project):
 
     parser.registry = "ghcr.io/myorg"
     parser.package = "test_docker_packaging"
-    parser.registry_version = "1.2.3"
 
-    assert parser.tag == "ghcr.io/myorg/test_docker_packaging:1.2.3"
+    with mock.patch.object(type(parser), "_DockerFile__get_image_tags", return_value=["1.2.3"]):
+        assert parser.tag == "ghcr.io/myorg/test_docker_packaging:1.2.3"
 
 
 def test_dockerfile_registry_inferred_from_single_repository(temp_docker_project):

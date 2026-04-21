@@ -76,7 +76,7 @@ class PyProject(abstract_parser.AbstractFileParser):
         """Builds the Python package."""
         with contextmanagers.WorkingDirectory(self.path, is_file=True):
             result = subprocess.run(
-                ["uv", "run", "--with", "build", "python", "-m", "build"],
+                ["uv", "run", "--with", "build", "--with", "setuptools>=61.0", "python", "-m", "build", "--no-isolation"],
                 capture_output=True,
                 text=True
             )
@@ -95,10 +95,15 @@ class PyProject(abstract_parser.AbstractFileParser):
             registry = registry or self._registry
             if not self._build:
                 raise RuntimeError("Must build before publishing")
-            cmd = ["uv", "run", "python", "-m", "twine", "upload"]
+            cmd = ["uv", "run", "--with", "twine", "python", "-m", "twine", "upload"]
             if registry:
                 cmd.extend(["--repository-url", registry])
             cmd.append(self._build)
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy())
             if result.returncode != 0:
-                raise RuntimeError(f"Publish failed: {result.stderr}")
+                error_parts = []
+                for part in (result.stderr, result.stdout):
+                    if isinstance(part, str) and part.strip():
+                        error_parts.append(part.strip())
+                error_output = "\n".join(error_parts) if error_parts else "unknown error"
+                raise RuntimeError(f"Publish failed: {error_output}")
