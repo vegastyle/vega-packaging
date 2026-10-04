@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.8.0] - 2026/10/04 16:39:39
+
+### Added
+
+- uv.lock parser that bumps the project's own locked version in place, so a release no longer leaves the lock stale and the next uv run no longer dirties the working tree
+- tests for the uv.lock parser, including line endings, workspace roots and the full update_semantic_version run
+- README note on how uv.lock is kept in step
+
+### Changed
+
+- version workflow to version v1.6
+
+
 ## [0.7.5] - 2026/04/21 23:36:50
 
 ### Fixed
