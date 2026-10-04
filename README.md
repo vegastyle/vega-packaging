@@ -97,6 +97,12 @@ of those files.
 
 Supported files are parsed in order of priority, with 1 being the highest priority number.
 
+A `uv.lock` beside the `pyproject.toml` is kept in step: only the project's own entry
+(`source = { editable = "." }`) has its `version` line bumped, in place, so every other byte stays
+as uv wrote it and nothing is re-resolved — no network access or credentials for private
+dependencies are needed. Without it, the next `uv run` after a release rewrites the lock and leaves
+the working tree dirty.
+
 #### Supported Arguments
 * **--message**
     * Required Argument.

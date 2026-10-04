@@ -765,3 +765,89 @@ def test_changes_missing_version(multi_version_changelog):
     parser = factory.get_parser_from_path(multi_version_changelog)
     result = parser.changes("9.9.9")
     assert result == ""
+
+
+# ============================================================================
+# Tests for the uv.lock parser
+# ============================================================================
+
+UV_LOCK = """version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "toml"
+version = "0.10.2"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "demo"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "toml" },
+]
+"""
+
+
+@pytest.fixture
+def temp_uv_project(tmp_path):
+    """A Python project whose uv.lock records the project at the pyproject version."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    (tmp_path / "uv.lock").write_bytes(UV_LOCK.encode("utf-8"))
+    return tmp_path
+
+
+def test_uv_lock_parser_is_found_by_exact_name():
+    """Only a file named exactly uv.lock is a uv lock."""
+    uv_lock_cls = factory.get_parser_cls_by_filename("uv.lock")
+
+    assert uv_lock_cls.NAME == "UvLock"
+    assert factory.get_parser_cls_by_filename("uv.lock.bak") is not uv_lock_cls
+    assert uv_lock_cls.PRIORITY > factory.get_parser_cls_by_filename("pyproject.toml").PRIORITY
+
+
+def test_uv_lock_parser_bumps_only_the_projects_own_version(temp_uv_project):
+    """The project's entry moves; dependencies and every other byte stay as uv wrote them."""
+    parser = factory.get_parser_from_path(str(temp_uv_project / "uv.lock"))
+
+    assert str(parser.version) == "0.1.0"
+    parser.update(commits.CommitMessage("#minor #added a feature"), None)
+
+    expected = UV_LOCK.replace('name = "demo"\nversion = "0.1.0"', 'name = "demo"\nversion = "0.2.0"')
+    assert (temp_uv_project / "uv.lock").read_bytes() == expected.encode("utf-8")
+
+
+def test_uv_lock_keeps_windows_line_endings(temp_uv_project):
+    """A lock checked out with CRLF keeps CRLF."""
+    path = temp_uv_project / "uv.lock"
+    path.write_bytes(UV_LOCK.replace("\n", "\r\n").encode("utf-8"))
+
+    factory.get_parser_from_path(str(path)).update(commits.CommitMessage("#patch #fixed x"), None)
+
+    content = path.read_bytes()
+    assert b'version = "0.1.1"\r\n' in content
+    assert b"\n" not in content.replace(b"\r\n", b"")
+
+
+def test_uv_lock_without_a_versioned_project_is_left_alone(temp_uv_project):
+    """A virtual workspace root has no version line, so there is nothing to keep in step."""
+    path = temp_uv_project / "uv.lock"
+    virtual = UV_LOCK.replace('version = "0.1.0"\nsource = { editable = "." }', 'source = { virtual = "." }')
+    path.write_bytes(virtual.encode("utf-8"))
+
+    factory.get_parser_from_path(str(path)).update(commits.CommitMessage("#minor #added x"), None)
+
+    assert path.read_bytes() == virtual.encode("utf-8")
+
+
+def test_update_semantic_version_keeps_uv_lock_in_step(temp_uv_project):
+    """The release bump moves pyproject.toml and the project's uv.lock entry together."""
+    paths = [str(temp_uv_project / name) for name in ("pyproject.toml", "uv.lock")]
+
+    update_semantic_version.update_semantic_version("#minor #added a feature", paths)
+
+    assert toml.load(temp_uv_project / "pyproject.toml")["project"]["version"] == "0.2.0"
+    assert 'name = "demo"\nversion = "0.2.0"' in (temp_uv_project / "uv.lock").read_text("utf-8")
